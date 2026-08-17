@@ -115,6 +115,24 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .empty{text-align:center;color:var(--muted);padding:30px 10px}
 .divlabel{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 8px}
 .badge{font-size:11px;padding:2px 7px;border-radius:6px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+/* ===== Dropdown có ô tìm kiếm (gõ từ khóa để lọc) ===== */
+.ssw{position:relative;display:inline-block;vertical-align:top}
+.ssw>input.ss-in{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 28px 10px 12px;width:100%;cursor:pointer;text-overflow:ellipsis;font-size:14px}
+.ssw>input.ss-in::placeholder{color:var(--muted)}
+.ssw>input.ss-in:focus{outline:none;border-color:var(--accent)}
+.ssw.open>input.ss-in{border-color:var(--accent)}
+.ssw.set>input.ss-in{color:var(--accent);font-weight:600}
+.ss-caret{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:11px}
+.ss-menu{position:absolute;left:0;top:100%;min-width:100%;width:max-content;max-width:min(88vw,380px);z-index:220;background:var(--panel2);border:1px solid var(--line);border-radius:10px;margin-top:4px;max-height:min(300px,55vh);overflow:auto;box-shadow:var(--shadow);display:none}
+.ssw.open .ss-menu{display:block}
+.ss-opt{padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ss-opt:last-child{border-bottom:none}
+.ss-opt.act,.ss-opt:hover{background:var(--panel)}
+.ss-opt.sel{color:var(--accent);font-weight:600}
+.ss-grp{padding:7px 12px;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--panel);position:sticky;top:0;z-index:1}
+.ss-empty{padding:12px;color:var(--muted);font-size:13px;white-space:normal}
+.ss-hit{color:var(--accent);font-weight:700}
+.ss-native{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;border:0!important;opacity:0!important;pointer-events:none!important;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 </head>
 <body>
@@ -2053,6 +2071,142 @@ function renderAll(){
 load(); const _bf0=autoBackfill(); const _fo0=autoFixOwners(); const _rn0=autoRestoreNotes(); const _cn0=autoCleanNames(); if(recordSnapshot()||_bf0||_fo0||_rn0||_cn0) save(); bindFI(); renderAll();
 if(requireLogin()){ const g=document.getElementById('authGate'); if(g){ g.style.display='flex'; renderGate(); } }
 if(typeof cloudInit==='function') cloudInit();
+
+/* ================= SEARCHABLE SELECT — gõ từ khóa để lọc dropdown =================
+   Bọc các <select> dài thành ô "gõ để tìm". Select gốc vẫn nằm nguyên trong DOM,
+   nên mọi code cũ (.value, sự kiện change, renderTx…) hoạt động y như trước. */
+(function(){
+  const FORCE=['fMonth','fSrc','fOwner','fSubOwner','rpYear','rpMonth','txCat','txOwner','etCat','etOwner','mvFrom','mvTo','acCls','acRos','fQuick'];
+  const MIN=8;                                   // select khác: từ 8 lựa chọn trở lên mới bọc
+  const PD=Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value');
+  const nrm=s=>(s==null?'':String(s)).toLowerCase().normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\s+/g,' ').trim();
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function mark(txt,toks){
+    let out=esc(txt); if(!toks.length) return out;
+    const n=nrm(txt);
+    const spans=[];
+    toks.forEach(t=>{ let from=0,k; while(t&&(k=n.indexOf(t,from))>=0){ spans.push([k,k+t.length]); from=k+t.length; } });
+    if(!spans.length) return out;
+    spans.sort((a,b)=>a[0]-b[0]);
+    const mg=[]; spans.forEach(sp=>{ const l=mg[mg.length-1]; if(l&&sp[0]<=l[1]) l[1]=Math.max(l[1],sp[1]); else mg.push(sp.slice()); });
+    out=''; let pos=0;
+    mg.forEach(([a,b])=>{ out+=esc(txt.slice(pos,a))+'<span class="ss-hit">'+esc(txt.slice(a,b))+'</span>'; pos=b; });
+    return out+esc(txt.slice(pos));
+  }
+  function label(sel){ const o=sel.selectedOptions[0]; return o?o.textContent.trim():''; }
+
+  function build(sel){
+    if(!sel||sel.multiple||sel.dataset.ss||sel.closest('.ssw')) return;
+    if(FORCE.indexOf(sel.id)<0 && sel.options.length<MIN) return;
+    sel.dataset.ss='1';
+    const w=document.createElement('div');
+    w.className='ssw';
+    w.setAttribute('style', sel.getAttribute('style')||'');
+    if(!w.style.width) w.style.width='100%';
+    sel.parentNode.insertBefore(w,sel);
+    w.appendChild(sel);
+    sel.classList.add('ss-native'); sel.tabIndex=-1;
+    const inp=document.createElement('input');
+    inp.className='ss-in'; inp.type='text'; inp.autocomplete='off'; inp.spellcheck=false;
+    inp.setAttribute('aria-label', sel.getAttribute('aria-label')||sel.id||'Bộ lọc');
+    const car=document.createElement('span'); car.className='ss-caret'; car.textContent='▾';
+    const menu=document.createElement('div'); menu.className='ss-menu';
+    w.appendChild(inp); w.appendChild(car); w.appendChild(menu);
+    w._sel=sel; sel._w=w; sel._in=inp; sel._menu=menu;
+
+    function syncText(){
+      const t=label(sel);
+      if(!w.classList.contains('open')) inp.value=t;
+      inp.placeholder=t||'Chọn…';
+      const o=sel.selectedOptions[0];
+      w.classList.toggle('set', !!(o&&o.value));
+    }
+    sel._ssSync=syncText;
+
+    function draw(){
+      const toks=nrm(inp.value).split(' ').filter(Boolean);
+      let html='', grp='', n=0;
+      [...sel.options].forEach((o,i)=>{
+        const g=o.parentElement.tagName==='OPTGROUP'?o.parentElement.label:'';
+        const txt=o.textContent.trim();
+        const hay=nrm(txt+' '+g+' '+o.value);
+        if(toks.length && !toks.every(t=>hay.indexOf(t)>=0)) return;
+        if(g!==grp){ grp=g; if(g) html+='<div class="ss-grp">'+esc(g)+'</div>'; }
+        html+='<div class="ss-opt'+(i===sel.selectedIndex?' sel':'')+'" data-i="'+i+'" title="'+esc(txt)+'">'+mark(txt,toks)+'</div>';
+        n++;
+      });
+      menu.innerHTML = n? html : '<div class="ss-empty">Không có mục nào khớp “'+esc(inp.value)+'”.</div>';
+      const cur=menu.querySelector('.ss-opt.sel')||menu.querySelector('.ss-opt');
+      if(cur){ cur.classList.add('act'); if(w.classList.contains('open')) cur.scrollIntoView({block:'nearest'}); }
+    }
+    function open(){
+      document.querySelectorAll('.ssw.open').forEach(x=>{ if(x!==w) close(x); });
+      w.classList.add('open'); inp.value=''; draw();
+      const r=w.getBoundingClientRect();
+      menu.style.maxHeight='min(300px,'+Math.max(160,innerHeight-r.bottom-16)+'px)';
+    }
+    function commit(i){
+      if(i==null||!sel.options[i]) return;
+      sel.selectedIndex=i;
+      close(w);
+      sel.dispatchEvent(new Event('input',{bubbles:true}));
+      sel.dispatchEvent(new Event('change',{bubbles:true}));
+      syncText();
+    }
+    inp.addEventListener('mousedown',e=>{ if(!w.classList.contains('open')){ e.preventDefault(); inp.focus(); open(); } });
+    inp.addEventListener('focus',()=>{ if(!w.classList.contains('open')) open(); });
+    inp.addEventListener('input',draw);
+    inp.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){ close(w); inp.blur(); return; }
+      if(e.key==='Tab'){ close(w); return; }
+      const opts=[...menu.querySelectorAll('.ss-opt')];
+      if(!opts.length) return;
+      let k=opts.findIndex(o=>o.classList.contains('act'));
+      if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+        e.preventDefault();
+        if(!w.classList.contains('open')){ open(); return; }
+        k=Math.max(0,Math.min(opts.length-1,k+(e.key==='ArrowDown'?1:-1)));
+        opts.forEach(o=>o.classList.remove('act')); opts[k].classList.add('act');
+        opts[k].scrollIntoView({block:'nearest'});
+      } else if(e.key==='Enter'){
+        e.preventDefault(); if(k<0)k=0;
+        commit(+opts[k].dataset.i);
+      }
+    });
+    menu.addEventListener('mousedown',e=>{ const o=e.target.closest('.ss-opt'); if(o){ e.preventDefault(); commit(+o.dataset.i); } });
+    inp.addEventListener('blur',()=>setTimeout(()=>{ if(w.classList.contains('open')&&!w.contains(document.activeElement)) close(w); },120));
+
+    /* Bắt mọi thay đổi từ code cũ: gán .value, .selectedIndex, nạp lại <option>, ẩn/hiện */
+    try{
+      Object.defineProperty(sel,'value',{configurable:true,
+        get(){ return PD.get.call(this); },
+        set(v){ PD.set.call(this,v); syncText(); }});
+    }catch(e){}
+    new MutationObserver(()=>{ syncText(); if(w.classList.contains('open')) draw(); })
+      .observe(sel,{childList:true,subtree:true});
+    new MutationObserver(()=>{
+      const d=sel.style.display;
+      w.style.display = (d==='none')?'none':(w.dataset.disp||'');
+    }).observe(sel,{attributes:true,attributeFilter:['style']});
+    if(sel.style.display==='none') w.style.display='none';
+    sel.addEventListener('change',syncText);
+    syncText();
+  }
+  function close(w){ w.classList.remove('open'); const s=w._sel; if(s&&s._ssSync) s._ssSync(); }
+  window.ssClose=()=>document.querySelectorAll('.ssw.open').forEach(close);
+  window.ssScan=root=>{ (root||document).querySelectorAll('select:not([data-ss])').forEach(build); };
+
+  document.addEventListener('mousedown',e=>{ if(!e.target.closest('.ssw')) window.ssClose(); });
+  /* Modal và các phần render động: tự bọc select mới xuất hiện */
+  new MutationObserver(ms=>{
+    let hit=false;
+    ms.forEach(m=>m.addedNodes.forEach(n=>{ if(n.nodeType===1&&(n.tagName==='SELECT'||n.querySelector&&n.querySelector('select'))) hit=true; }));
+    if(hit) window.ssScan();
+  }).observe(document.body,{childList:true,subtree:true});
+  window.ssScan();
+})();
+
 </script>
 </body>
 </html>
