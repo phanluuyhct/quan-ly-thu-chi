@@ -1,0 +1,53 @@
+name: Keep Supabase Awake
+
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Ping Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Goi REST API cua Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          PING_TABLE: ${{ vars.PING_TABLE }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Thieu secret SUPABASE_URL hoac SUPABASE_ANON_KEY."
+            exit 1
+          fi
+
+          BASE="${SUPABASE_URL%/}"
+          if [ -n "${PING_TABLE:-}" ]; then
+            TARGET="$BASE/rest/v1/${PING_TABLE}?select=*&limit=1"
+          else
+            TARGET="$BASE/rest/v1/"
+          fi
+
+          echo "Dang ping: ${TARGET}"
+
+          CODE=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+                   --max-time 30 --retry 3 --retry-delay 10 --retry-all-errors \
+                   -H "apikey: ${SUPABASE_ANON_KEY}" \
+                   -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+                   "${TARGET}")
+
+          echo "Ma tra ve: HTTP ${CODE}"
+
+          if [ "${CODE}" -ge 200 ] && [ "${CODE}" -lt 400 ]; then
+            echo "::notice::Supabase con thuc (HTTP ${CODE})."
+          else
+            echo "::error::Ping that bai (HTTP ${CODE})."
+            head -c 800 /tmp/resp.txt || true
+            exit 1
+          fi
