@@ -69,6 +69,10 @@ tr:last-child td{border-bottom:none}
 input,select,button,textarea{font-family:inherit;font-size:14px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .field label{font-size:13px;color:var(--muted)}
+.pwwrap{position:relative;display:block}
+.pwwrap input{width:100%;padding-right:48px}
+.pweye{position:absolute;right:5px;top:50%;transform:translateY(-50%);background:none;border:0;cursor:pointer;font-size:16px;line-height:1;padding:7px 9px;color:var(--muted);border-radius:8px;-webkit-tap-highlight-color:transparent}
+.pweye:hover{background:rgba(255,255,255,.08)}
 input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px 12px;width:100%}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .btn{background:var(--accent);color:#08131b;border:none;border-radius:10px;padding:11px 16px;font-weight:600;cursor:pointer}
@@ -420,7 +424,7 @@ const OWNER_MAP = {"SH1": "Cá nhân", "SH2": "Cẩm Tú", "SH3": "Minh Phương
 const OWNER_GROUP = {"Cá nhân": "Cá nhân", "Cẩm Tú": "Người thân", "Minh Phương": "Người thân", "Bà nội": "Người thân", "Quỹ ĐV SSTT": "Bệnh viện", "Quỹ SHKH - Hội thảo - Hội nghị": "Bệnh viện", "Quỹ Đào tạo - CLBV (DỰ PHÒNG)": "Bệnh viện", "Tạm ứng chi đào tạo": "Bệnh viện", "Hội thảo SSTT": "Bệnh viện", "Kinh phí đề tài VAN": "Bệnh viện", "GCNKQ": "Khác", "Giao dịch giúp": "Khác", "Dự phòng đóng VAT - SSTT": "Bệnh viện", "Quỹ NCKH - đề tài": "Bệnh viện", "Quỳnh - Trang": "Người thân", "Dự phòng đóng VAT - Giảng viên đào tạo (chuyên gia)": "Bệnh viện", "Quỹ DP Đào tạo 2026": "Bệnh viện", "Tạm ứng chi 10% 3 tỉ (năm 2025 để lại)": "Bệnh viện", "KP đề tài Biên niên sử": "Bệnh viện", "Anh Phong": "Người thân", "YTCC - Marketting": "Bệnh viện", "Khai trương - nhà C": "Bệnh viện"};
 
 
-const SEED_ACC = [{"cls":"Đầu tư","name":"DragonX (DCDS)","value":77039251,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Kim loại","name":"Bạc (lượng)","value":413836000,"owner":"Cá nhân","ros":"Rổ 2\\"},{"cls":"Kim loại","name":"Vàng (Chỉ)","value":198261000,"owner":"Cá nhân","ros":"Rổ 2\\"},{"cls":"Ngoại tệ","name":"Dolar","value":325404100,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"BIDV","value":6170271,"owner":"Chung","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"MB bank","value":3969934,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"Vietcombank","value":732068,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - DP lớn","value":20000000,"owner":"Chung","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - DP nhỏ","value":19500000,"owner":"Cẩm Tú","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Li xì","value":15200000,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Tiêu vặt","value":115000,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Ví","value":4420858,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tín dụng","name":"HSBC Visa","value":1385999,"owner":"Cá nhân","ros":"Rổ 0\\"},{"cls":"Tín dụng","name":"VP bank Lady (Credit)","value":-12535182,"owner":"Cá nhân","ros":"Rổ 0\\"},{"cls":"Đầu tư","name":"VCBS (009C319097)","value":264000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"MB Digit Trading","value":20020000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"Manulife - đóng thêm","value":16000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"DragonX (DCBF)","value":296981067,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"BHNT","name":"Manulife (HĐ 3831662059 )","value":61998000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"BHNT","name":"Manulife (HĐ 3840342669 )","value":28738000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"BHNT","name":"Generali (HĐ 60163073)","value":197165000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"Thanh toán","name":"Techcombank","value":47251796,"owner":"Chung","ros":"Rổ 4\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26503071975692)","value":100000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26503071976295)","value":60000000,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (Tích lũy Như Ý)","value":3000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (Phát Lộc \\_146)","value":10000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26052023142025)","value":50000000,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26052023152087)","value":50000000,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (14604197785956)","value":100000000,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26061907036423)","value":39000000,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ CCTG Bảo Lộc (86014803231214)","value":20003400,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ CCTG Bảo Lộc (86014803240207)","value":30236700,"owner":"Chung","ros":"Rổ 1\\"},{"cls":"Đầu tư","name":"DragonX (DCBA)","value":28000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Tiết kiệm","name":"Tech\\_CCTG Bảo Lộc (86014803231208)","value":50297500,"owner":"Chung","ros":"Rổ 1\\"}];
+const SEED_ACC = [{"cls":"Đầu tư","name":"DragonX (DCDS)","value":77039251,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Kim loại","name":"Bạc (lượng)","value":413836000,"owner":"Cá nhân","ros":"Rổ 2\\"},{"cls":"Kim loại","name":"Vàng (Chỉ)","value":198261000,"owner":"Cá nhân","ros":"Rổ 2\\"},{"cls":"Ngoại tệ","name":"Dolar","value":325404100,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"BIDV","value":6170271,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"MB bank","value":3969934,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Thanh toán","name":"Vietcombank","value":732068,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - DP lớn","value":20000000,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - DP nhỏ","value":19500000,"owner":"Cẩm Tú","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Li xì","value":15200000,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Tiêu vặt","value":115000,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiền mặt","name":"Tiền mặt - Ví","value":4420858,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tín dụng","name":"HSBC Visa","value":1385999,"owner":"Cá nhân","ros":"Rổ 0\\"},{"cls":"Tín dụng","name":"VP bank Lady (Credit)","value":-12535182,"owner":"Cá nhân","ros":"Rổ 0\\"},{"cls":"Đầu tư","name":"VCBS (009C319097)","value":264000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"MB Digit Trading","value":20020000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"Manulife - đóng thêm","value":16000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Đầu tư","name":"DragonX (DCBF)","value":296981067,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"BHNT","name":"Manulife (HĐ 3831662059 )","value":61998000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"BHNT","name":"Manulife (HĐ 3840342669 )","value":28738000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"BHNT","name":"Generali (HĐ 60163073)","value":197165000,"owner":"Cá nhân","ros":"Rổ 5\\"},{"cls":"Thanh toán","name":"Techcombank","value":47251796,"owner":"Cá nhân","ros":"Rổ 4\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26503071975692)","value":100000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26503071976295)","value":60000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (Tích lũy Như Ý)","value":3000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (Phát Lộc \\_146)","value":10000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26052023142025)","value":50000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26052023152087)","value":50000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ (14604197785956)","value":100000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"MB\\_CCTG (26061907036423)","value":39000000,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ CCTG Bảo Lộc (86014803231214)","value":20003400,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Tiết kiệm","name":"Tech\\_ CCTG Bảo Lộc (86014803240207)","value":30236700,"owner":"Cá nhân","ros":"Rổ 1\\"},{"cls":"Đầu tư","name":"DragonX (DCBA)","value":28000000,"owner":"Cá nhân","ros":"Rổ 3\\"},{"cls":"Tiết kiệm","name":"Tech\\_CCTG Bảo Lộc (86014803231208)","value":50297500,"owner":"Cá nhân","ros":"Rổ 1\\"}];
 const SEED_OWN = [{"group":"Cá nhân","name":"Cá nhân","value":1288920611},{"group":"Người thân","name":"Cẩm Tú","value":61181982},{"group":"Người thân","name":"Minh Phương","value":99154372},{"group":"Người thân","name":"Bà nội","value":259885049},{"group":"Bệnh viện","name":"Quỹ ĐV SSTT","value":38892620},{"group":"Bệnh viện","name":"Quỹ SHKH - Hội thảo - Hội nghị","value":0},{"group":"Bệnh viện","name":"Quỹ Đào tạo - CLBV (DỰ PHÒNG)","value":0},{"group":"Bệnh viện","name":"Tạm ứng chi đào tạo","value":0},{"group":"Bệnh viện","name":"Hội thảo SSTT","value":0},{"group":"Bệnh viện","name":"Kinh phí đề tài VAN","value":0},{"group":"Khác","name":"GCNKQ","value":0},{"group":"Khác","name":"Giao dịch giúp","value":-720000},{"group":"Bệnh viện","name":"Dự phòng đóng VAT - SSTT","value":0},{"group":"Bệnh viện","name":"Quỹ NCKH - đề tài","value":50554400},{"group":"Người thân","name":"Quỳnh - Trang","value":0},{"group":"Bệnh viện","name":"Dự phòng đóng VAT - Giảng viên đào tạo (chuyên gia)","value":0},{"group":"Bệnh viện","name":"Quỹ DP Đào tạo 2026","value":121000000},{"group":"Bệnh viện","name":"Tạm ứng chi 10% 3 tỉ (năm 2025 để lại)","value":100000000},{"group":"Bệnh viện","name":"KP đề tài Biên niên sử","value":191786000},{"group":"Người thân","name":"Anh Phong","value":21100000},{"group":"Bệnh viện","name":"YTCC - Marketting","value":43673040},{"group":"Bệnh viện","name":"Khai trương - nhà C","value":-1500000}];
 /* ================= UTIL ================= */
 const VND = new Intl.NumberFormat('vi-VN');
@@ -644,15 +648,25 @@ function renderGate(){
   }
   if(window._recovery){
     el.innerHTML=`<p class="mini">Đặt mật khẩu mới cho tài khoản của bạn:</p>
-      <div class="field"><label>Mật khẩu mới (≥ 6 ký tự)</label><input id="gNewPw" type="password" autocomplete="new-password"></div>
+      ${pwField('gNewPw','Mật khẩu mới (≥ 6 ký tự)','autocomplete="new-password"')}
       <button class="btn" style="width:100%" onclick="gateSetNewPw()">Lưu mật khẩu mới & vào app</button>`;
     return;
   }
   el.innerHTML=`<div class="field"><label>Email</label><input id="gEmail" type="email" autocomplete="username" value="${(store.get('last_email')||'')}"></div>
-    <div class="field"><label>Mật khẩu</label><input id="gPw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')gateSignIn()"></div>
+    ${pwField('gPw','Mật khẩu','autocomplete="current-password" onkeydown="if(event.key===\'Enter\')gateSignIn()"')}
     <button class="btn" style="width:100%" onclick="gateSignIn()">Đăng nhập</button>
     <p style="margin-top:12px;text-align:center"><a href="#" onclick="gateForgot();return false" style="font-size:13.5px">Quên mật khẩu? Gửi email đặt lại</a></p>`;
 }
+/* Ô mật khẩu có nút xem/ẩn */
+window.pwToggle=(id,btn)=>{ const e=document.getElementById(id); if(!e) return;
+  const showing = e.type==='password';
+  e.type = showing ? 'text' : 'password';
+  btn.textContent = showing ? '🙈' : '👁';
+  btn.title = showing ? 'Ẩn mật khẩu' : 'Hiện mật khẩu';
+  btn.setAttribute('aria-label', btn.title);
+  try{ e.focus(); const n=e.value.length; e.setSelectionRange(n,n); }catch(_){}
+};
+window.pwField=(id,label,attrs)=>`<div class="field"><label>${label}</label><span class="pwwrap"><input id="${id}" type="password" ${attrs||''}><button type="button" class="pweye" title="Hiện mật khẩu" aria-label="Hiện mật khẩu" onclick="pwToggle('${id}',this)">👁</button></span></div>`;
 window.gateForgot=async()=>{
   if(!CLOUD.sb){ alert('Chưa sẵn sàng, thử lại.'); return; }
   const email=(document.getElementById('gEmail').value||'').trim();
@@ -1055,7 +1069,10 @@ function allOwners(){
   if(DB&&DB.ownerGroups) Object.keys(DB.ownerGroups).forEach(v=>s.add(v));
   (DB.accounts||[]).forEach(a=>a.owner&&s.add(a.owner));
   (DB.transactions||[]).forEach(t=>t.owner&&s.add(t.owner));
-  return [...s].sort((a,b)=>a.localeCompare(b,'vi'));
+  if(typeof OWNER_MERGE!=='undefined') Object.keys(OWNER_MERGE).forEach(k=>s.delete(k)); // bỏ chủ sở hữu đã gộp (vd "Chung")
+  const out=[...s].sort((a,b)=>a.localeCompare(b,'vi'));
+  const i=out.indexOf('Cá nhân'); if(i>0){ out.splice(i,1); out.unshift('Cá nhân'); }     // "Cá nhân" luôn đứng đầu = mặc định
+  return out;
 }
 let FCAT_SEL=new Set();   // danh mục đang lọc (rỗng = tất cả)
 function currentTxList(){
@@ -1600,7 +1617,7 @@ function renderCloudCard(){
   if(!CLOUD.user){
     el.innerHTML=`<p class="mini">Đã cấu hình Supabase. Đăng nhập để đồng bộ (hoặc đăng ký lần đầu).</p>
       <div class="field"><label>Email</label><input id="sbEmail" type="email" autocomplete="username"></div>
-      <div class="field"><label>Mật khẩu</label><input id="sbPw" type="password" autocomplete="current-password"></div>
+      ${pwField('sbPw','Mật khẩu','autocomplete="current-password"')}
       <div class="row"><button class="btn" onclick="cloudSignIn()">Đăng nhập</button>
         <button class="btn ghost" onclick="cloudSignUp()">Đăng ký</button>
         <button class="btn ghost" onclick="store.set('sb_url','');store.set('sb_key','');renderCloudCard()">Đổi cấu hình</button></div>`;
@@ -2046,6 +2063,27 @@ function autoFixOwners(){
   DB.transactions.forEach(t=>{ if(t.owner&&OWNER_MAP[t.owner]){ t.owner=OWNER_MAP[t.owner]; n++; } });
   return n;
 }
+/* Gộp chủ sở hữu "Chung" vào "Cá nhân" — chạy 1 lần, không còn dùng "Chung" nữa */
+var OWNER_MERGE={'Chung':'Cá nhân'};   // var để hoisting an toàn khi allOwners() chạy sớm
+function autoMergeOwners(){
+  if(!DB) return 0; let n=0;
+  (DB.accounts||[]).forEach(a=>{ const to=OWNER_MERGE[a.owner]; if(to){ a.owner=to; n++; } });
+  (DB.transactions||[]).forEach(t=>{ const to=OWNER_MERGE[t.owner]; if(to){ t.owner=to; n++; } });
+  if(Array.isArray(DB.owners)){
+    const keep=[];
+    DB.owners.forEach(o=>{
+      const to=OWNER_MERGE[o.name];
+      if(!to){ keep.push(o); return; }
+      n++;
+      const tgt=DB.owners.find(x=>x.name===to)||keep.find(x=>x.name===to);
+      if(tgt) tgt.value=(Number(tgt.value)||0)+(Number(o.value)||0);   // gộp số dư vào chủ sở hữu đích
+      else { o.name=to; keep.push(o); }                                 // chưa có thì đổi tên
+    });
+    DB.owners=keep;
+  }
+  if(DB.ownerGroups) Object.keys(OWNER_MERGE).forEach(k=>{ if(k in DB.ownerGroups){ delete DB.ownerGroups[k]; n++; } });
+  return n;
+}
 /* Dọn dấu "\" sót trong tên tài khoản & nguồn/đích giao dịch (từ escape của Google Sheet) */
 function autoCleanNames(){
   if(!DB) return 0; let n=0;
@@ -2084,7 +2122,7 @@ function renderAll(){
 ['fType','fGrp','fSrc','fOwner','fSubOwner'].forEach(id=>document.addEventListener('change',e=>{ if(e.target.id===id)renderTx(); }));
 
 /* ================= INIT ================= */
-load(); const _bf0=autoBackfill(); const _fo0=autoFixOwners(); const _rn0=autoRestoreNotes(); const _cn0=autoCleanNames(); if(recordSnapshot()||_bf0||_fo0||_rn0||_cn0) save(); bindFI(); renderAll();
+load(); const _bf0=autoBackfill(); const _fo0=autoFixOwners(); const _mg0=autoMergeOwners(); const _rn0=autoRestoreNotes(); const _cn0=autoCleanNames(); if(recordSnapshot()||_bf0||_fo0||_mg0||_rn0||_cn0) save(); bindFI(); renderAll();
 if(requireLogin()){ const g=document.getElementById('authGate'); if(g){ g.style.display='flex'; renderGate(); } }
 if(typeof cloudInit==='function') cloudInit();
 
