@@ -973,12 +973,22 @@ window.showClassDetail=cls=>{
     <table><tbody>${accts.map(a=>`<tr><td>${a.name}<div class="mini">${a.owner}</div></td>
       <td class="num" style="color:${a.value<0?'var(--red)':'var(--txt)'}">${fmt(a.value)}</td></tr>`).join('')}</tbody></table>`);
 };
+const _q=s=>String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");   // escape cho chuỗi trong onclick
 window.showOwnerDetail=group=>{
   const funds=(DB.owners||[]).filter(o=>o.group===group).sort((a,b)=>b.value-a.value);
   const tot=funds.reduce((s,o)=>s+o.value,0);
+  const nTx=n=>(DB.transactions||[]).filter(t=>(t.owner||'')===n).length;
   openModal(`<button class="close" onclick="closeModal()">×</button><h2>${group}</h2>
     <div class="mini" style="margin-bottom:10px">Tổng (sổ Sở hữu): <b style="color:var(--accent)">${fmt(tot)}</b> · ${funds.length} nguồn</div>
-    <table><tbody>${funds.map(o=>`<tr><td>${o.name}</td><td class="num" style="color:${o.value<0?'var(--red)':'var(--txt)'}">${fmt(o.value)}</td></tr>`).join('')}</tbody></table>`);
+    <table><tbody>${funds.map(o=>{const c=nTx(o.name);
+      return `<tr style="cursor:pointer" onclick="showOwnerTx('${_q(o.name)}','${_q(group)}')"><td>${o.name} ›<div class="mini">${c?c+' giao dịch':'chưa có giao dịch'}</div></td>
+      <td class="num" style="color:${o.value<0?'var(--red)':'var(--txt)'}">${fmt(o.value)}</td></tr>`;}).join('')}</tbody></table>`);
+};
+/* Bấm vào 1 nguồn sở hữu → liệt kê giao dịch của nguồn đó */
+window.showOwnerTx=(name,group)=>{
+  const l=(DB.transactions||[]).filter(t=>(t.owner||'')===name);
+  const back=group?`<button class="btn sm ghost" style="margin-bottom:10px" onclick="showOwnerDetail('${_q(group)}')">← ${group}</button>`:'';
+  showTxList('Nguồn: '+name, l, back);
 };
 window.showRosDetail=k=>{
   const meta=(typeof ROS_META!=='undefined'&&ROS_META[k])||{name:(typeof ROS_OTHER!=='undefined'&&ROS_OTHER[k])||k};
@@ -1184,10 +1194,10 @@ window.delTx=id=>{ const t=DB.transactions.find(x=>x.id===id); if(t&&t.m===1){ c
 window.clearTxFilters=()=>{ ['fType','fGrp','fSrc','fOwner','fSubOwner','fMonth','fFrom','fTo','fQuick'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';}); FCAT_SEL=new Set(); updateCatBtn(); renderTx(); };
 window.txShowCat=(cat)=>{ const l=currentTxList().filter(t=>((t.type==='Chi'&&(t.grp==='SH'||!t.grp))||t.type==='Thu')&&(t.category||'Khác')===cat); const mo=document.getElementById('fMonth').value; showTxList('Danh mục: '+cat+(mo?' · '+mo:''), l); };
 /* Modal liệt kê danh sách giao dịch (dùng cho drill-down Báo cáo) */
-window.showTxList=(title,list)=>{
+window.showTxList=(title,list,backHTML)=>{
   list=list.slice().sort((a,b)=>b.date.localeCompare(a.date));
   const tot=list.reduce((s,t)=>s+(t.type==='Chi'?-1:1)*parseNum(t.amount),0);
-  openModal(`<button class="close" onclick="closeModal()">×</button><h2>${title}</h2>
+  openModal(`<button class="close" onclick="closeModal()">×</button>${backHTML||''}<h2>${title}</h2>
     <div class="mini" style="margin-bottom:10px">${list.length} giao dịch · ròng ${tot<0?'-':''}${fmt(Math.abs(tot))}</div>`+
     (list.length?`<table><tbody>${list.slice(0,200).map(t=>{const src=t.source||t.owner||'';
       return `<tr style="cursor:pointer" onclick="showTxDetail('${t.id}')"><td>${t.date.slice(8)}/${t.date.slice(5,7)}<div class="mini">${t.category||''}${t.note?' · '+t.note.slice(0,26):''}</div>${src?`<div class="mini" style="color:var(--accent2)">◦ ${src}${t.dest?' → '+t.dest:''}</div>`:''}</td><td class="num" style="color:${t.type==='Chi'?'var(--red)':t.type==='Thu'?'var(--green)':'var(--txt)'}">${t.type==='Chi'?'-':''}${fmt(parseNum(t.amount))}</td></tr>`;}).join('')}</tbody></table>${list.length>200?'<div class="mini" style="margin-top:6px">Hiển thị 200 giao dịch đầu.</div>':''}`:'<div class="empty">Không có giao dịch.</div>'));
