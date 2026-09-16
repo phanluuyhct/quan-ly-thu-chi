@@ -1138,24 +1138,40 @@ function renderTx(){
       <td class="num" style="color:${t.type==='Chi'?'var(--red)':t.type==='Thu'?'var(--green)':'var(--txt)'};white-space:nowrap">${t.type==='Chi'?'-':''}${fmt(parseNum(t.amount))}</td>
       <td class="num"><button class="btn sm ghost" onclick="event.stopPropagation();delTx('${t.id}')">✕</button></td></tr>`;}).join('')+`</tbody></table>`;
   }
-  // category breakdown (chi only)
-  const cb={}; list.filter(t=>t.type==='Chi'&&(t.grp==='SH'||!t.grp)).forEach(t=>cb[t.category||'Khác']=(cb[t.category||'Khác']||0)+parseNum(t.amount));
-  const ent=Object.entries(cb).sort((a,b)=>b[1]-a[1]); const tot=ent.reduce((s,e)=>s+e[1],0);
+  // category breakdown — CHI RÒNG theo danh mục (chi − thu cùng danh mục), theo bộ lọc đang xem
+  const cb={};
+  list.forEach(t=>{
+    const isChi = t.type==='Chi' && (t.grp==='SH'||!t.grp);
+    const isThu = t.type==='Thu';
+    if(!isChi && !isThu) return;
+    const k = t.category||'Khác';
+    if(!cb[k]) cb[k]={chi:0,thu:0};
+    if(isChi) cb[k].chi += parseNum(t.amount); else cb[k].thu += parseNum(t.amount);
+  });
+  const ent=Object.entries(cb).filter(([,o])=>o.chi>0).map(([c,o])=>[c,o.chi-o.thu,o]).sort((a,b)=>b[1]-a[1]);
+  const tot=ent.reduce((s,e)=>s+Math.max(e[1],0),0)||1;
   const cbx=document.getElementById('catBreakdown');
-  cbx.innerHTML= ent.length? ent.map(([c,v],i)=>`
-    <div style="margin:9px 0;cursor:pointer" onclick="txShowCat('${c.replace(/'/g,"\\'")}')"><div class="row" style="justify-content:space-between"><span>${c} ›</span><span class="mini">${fmt(v)} · ${(v/tot*100).toFixed(0)}%</span></div>
-    <div class="bar"><span style="width:${v/tot*100}%;background:${['#f0665f','#f2b84b','#4f9cf9','#a887f4','#37c2a8','#e0e6ed'][i%6]}"></span></div></div>`).join('')
-    : '<div class="empty">Chưa có khoản chi trong kỳ này.</div>';
+  cbx.innerHTML= ent.length? ent.map(([c,v,o],i)=>{
+    const pct = v>0 ? v/tot*100 : 0;
+    const col = v>0 ? ['#f0665f','#f2b84b','#4f9cf9','#a887f4','#37c2a8','#e0e6ed'][i%6] : 'var(--green)';
+    const sty = v<0 ? 'color:var(--green)' : (v===0 ? 'opacity:.6' : '');
+    const sub = (o.thu>0 && o.chi>0) ? `<div class="mini" style="opacity:.7">chi ${fmt(o.chi)} − thu ${fmt(o.thu)}</div>` : '';
+    return `<div style="margin:9px 0;cursor:pointer" onclick="txShowCat('${c.replace(/'/g,"\\'")}')">
+    <div class="row" style="justify-content:space-between"><span>${c} ›</span><span class="mini" style="${sty}">${v<0?'+':''}${fmt(Math.abs(v))} · ${pct.toFixed(0)}%</span></div>
+    ${sub}
+    <div class="bar"><span style="width:${v<0?3:pct}%;background:${col}"></span></div></div>`;
+  }).join('')
+    : '<div class="empty">Chưa có giao dịch trong kỳ này.</div>';
 }
 window.delTx=id=>{ const t=DB.transactions.find(x=>x.id===id); if(t&&t.m===1){ const eff=ownerNetEffect(t); if(eff) applyOwnerDelta(t.owner,-eff); } DB.transactions=DB.transactions.filter(x=>x.id!==id); save(); renderAll(); };
 window.clearTxFilters=()=>{ ['fType','fGrp','fSrc','fOwner','fSubOwner','fMonth','fFrom','fTo','fQuick'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';}); FCAT_SEL=new Set(); updateCatBtn(); renderTx(); };
-window.txShowCat=(cat)=>{ const l=currentTxList().filter(t=>t.type==='Chi'&&(t.grp==='SH'||!t.grp)&&(t.category||'Khác')===cat); const mo=document.getElementById('fMonth').value; showTxList('Chi: '+cat+(mo?' · '+mo:''), l); };
+window.txShowCat=(cat)=>{ const l=currentTxList().filter(t=>((t.type==='Chi'&&(t.grp==='SH'||!t.grp))||t.type==='Thu')&&(t.category||'Khác')===cat); const mo=document.getElementById('fMonth').value; showTxList('Danh mục: '+cat+(mo?' · '+mo:''), l); };
 /* Modal liệt kê danh sách giao dịch (dùng cho drill-down Báo cáo) */
 window.showTxList=(title,list)=>{
   list=list.slice().sort((a,b)=>b.date.localeCompare(a.date));
-  const tot=list.reduce((s,t)=>s+parseNum(t.amount),0);
+  const tot=list.reduce((s,t)=>s+(t.type==='Chi'?-1:1)*parseNum(t.amount),0);
   openModal(`<button class="close" onclick="closeModal()">×</button><h2>${title}</h2>
-    <div class="mini" style="margin-bottom:10px">${list.length} giao dịch · tổng ${fmt(tot)}</div>`+
+    <div class="mini" style="margin-bottom:10px">${list.length} giao dịch · ròng ${tot<0?'-':''}${fmt(Math.abs(tot))}</div>`+
     (list.length?`<table><tbody>${list.slice(0,200).map(t=>{const src=t.source||t.owner||'';
       return `<tr style="cursor:pointer" onclick="showTxDetail('${t.id}')"><td>${t.date.slice(8)}/${t.date.slice(5,7)}<div class="mini">${t.category||''}${t.note?' · '+t.note.slice(0,26):''}</div>${src?`<div class="mini" style="color:var(--accent2)">◦ ${src}${t.dest?' → '+t.dest:''}</div>`:''}</td><td class="num" style="color:${t.type==='Chi'?'var(--red)':t.type==='Thu'?'var(--green)':'var(--txt)'}">${t.type==='Chi'?'-':''}${fmt(parseNum(t.amount))}</td></tr>`;}).join('')}</tbody></table>${list.length>200?'<div class="mini" style="margin-top:6px">Hiển thị 200 giao dịch đầu.</div>':''}`:'<div class="empty">Không có giao dịch.</div>'));
 };
