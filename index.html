@@ -228,7 +228,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
       </select>
       <select id="fGrp" style="max-width:160px">
         <option value="">Tất cả nhóm</option>
-        <option value="SH">Chi sinh hoạt</option><option value="TS">Mua tài sản/ĐT</option><option value="CH">Chuyển nguồn</option>
+        <option value="SH">Chi sinh hoạt</option><option value="TS">Mua tài sản/ĐT</option><option value="CH">Chuyển nguồn</option><option value="CSH">Tạm ứng / Hoàn ứng</option>
       </select>
       <button id="fCatBtn" class="btn sm ghost" style="max-width:210px" onclick="openCatFilter()">Tất cả danh mục ▾</button>
       <select id="fSrc" style="max-width:190px"><option value="">Tất cả nguồn</option></select>
@@ -238,6 +238,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <div class="row" style="gap:8px;margin:12px 0 4px;flex-wrap:wrap;align-items:center">
       <button class="btn addbtn" onclick="addTxModal()">＋ Thêm giao dịch</button>
       <button class="btn sm ghost" onclick="transferModal()">⇄ Chuyển / Mua-Bán</button>
+      <button class="btn sm ghost" onclick="advanceModal()">⇄ Tạm ứng / Hoàn ứng</button>
       <span style="margin-left:auto"></span>
       <button class="btn sm ghost" onclick="exportFilteredXLSX()">⬇ Excel (lọc)</button>
       <button class="btn sm ghost" onclick="printFiltered()">🖨 In</button>
@@ -289,6 +290,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
       <button class="btn sm ghost" onclick="ownerForm(null)">+ Thêm quỹ / chủ sở hữu</button></div>
     <div id="ownerFundList"></div>
     <div class="mini" style="margin-top:8px">Đây là số dư tài sản mỗi quỹ / người đang nắm (nguồn cho biểu đồ "Cơ cấu theo chủ sở hữu" và các đường theo nhóm/quỹ). Bấm ✎ để sửa số dư, ✕ để xóa.</div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="toolbar"><h3 style="margin:0;flex:1">Tạm ứng chưa hoàn</h3>
+      <button class="btn sm ghost" onclick="advanceModal()">⇄ Tạm ứng / Hoàn ứng</button></div>
+    <div id="advanceBox"></div>
   </div>
 </section>
 
@@ -586,7 +592,18 @@ function cloudSchedulePush(){
 }
 /* Đẩy ngay khi rời/ẩn trang để không mất thay đổi vừa nhập (tránh reload nuốt dữ liệu) */
 function cloudFlush(){ if(!cloudReady())return; clearTimeout(CLOUD.timer); cloudPush(true); }
-window.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') cloudFlush(); });
+/* Quay lại tab -> tự kéo bản mới từ đám mây (thấy giao dịch được thêm từ nơi khác).
+   cloudPull(false) an toàn 2 chiều: còn thay đổi chưa đẩy thì giữ local và đẩy lên,
+   đã đồng bộ xong mới lấy bản đám mây làm chuẩn. */
+let _lastAutoPull=0;
+window.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){ cloudFlush(); return; }
+  if(!cloudReady()) return;
+  const now=Date.now();
+  if(now-_lastAutoPull < 5000) return;
+  _lastAutoPull=now;
+  cloudPull();
+});
 window.addEventListener('pagehide',cloudFlush);
 window.addEventListener('beforeunload',cloudFlush);
 async function cloudPush(silent){
@@ -1155,7 +1172,7 @@ function renderTx(){
     wrap.innerHTML=(list.length>CAP?`<div class="mini" style="margin-bottom:8px">Hiển thị ${CAP}/${list.length} giao dịch gần nhất. Lọc theo tháng để xem đầy đủ.</div>`:'')+
     `<table class="txtable"><thead><tr><th>Giao dịch</th><th class="num">Số tiền</th><th></th></tr></thead><tbody>`+
     shown.map(t=>{const cls=t.type==='Thu'?'thu':t.type==='Chi'?'chi':'chuyen';
-      const lbl=t.type==='Chi'&&t.grp==='TS'?'Mua TS':t.type;
+      const lbl=t.grp==='CSH'?(t.category||'Tạm ứng'):(t.type==='Chi'&&t.grp==='TS'?'Mua TS':t.type);
       const src=t.source?`${t.source}${t.dest?' → '+t.dest:''}`:'';
       const line2=[t.owner||'', t.note||''].filter(Boolean).join(' · ');
       return `<tr style="cursor:pointer" onclick="showTxDetail('${t.id}')">
@@ -1190,7 +1207,10 @@ function renderTx(){
   }).join('')
     : '<div class="empty">Chưa có giao dịch trong kỳ này.</div>';
 }
-window.delTx=id=>{ const t=DB.transactions.find(x=>x.id===id); if(t&&t.m===1){ const eff=ownerNetEffect(t); if(eff) applyOwnerDelta(t.owner,-eff); } DB.transactions=DB.transactions.filter(x=>x.id!==id); save(); renderAll(); };
+window.delTx=id=>{ const t=DB.transactions.find(x=>x.id===id);
+  if(t&&t.grp==='CSH'){ const a=parseNum(t.amount); applyOwnerDelta(t.owner,a); applyOwnerDelta(t.ownerTo,-a); }   // hoàn lại 2 sổ
+  else if(t&&t.m===1){ const eff=ownerNetEffect(t); if(eff) applyOwnerDelta(t.owner,-eff); }
+  DB.transactions=DB.transactions.filter(x=>x.id!==id); save(); renderAll(); };
 window.clearTxFilters=()=>{ ['fType','fGrp','fSrc','fOwner','fSubOwner','fMonth','fFrom','fTo','fQuick'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';}); FCAT_SEL=new Set(); updateCatBtn(); renderTx(); };
 window.txShowCat=(cat)=>{ const l=currentTxList().filter(t=>((t.type==='Chi'&&(t.grp==='SH'||!t.grp))||t.type==='Thu')&&(t.category||'Khác')===cat); const mo=document.getElementById('fMonth').value; showTxList('Danh mục: '+cat+(mo?' · '+mo:''), l); };
 /* Modal liệt kê danh sách giao dịch (dùng cho drill-down Báo cáo) */
@@ -1226,6 +1246,7 @@ window.showTxDetail=id=>{
 };
 window.editTx=id=>{
   const t=DB.transactions.find(x=>x.id===id); if(!t)return;
+  if(t.grp==='CSH'){ alert('Giao dịch Tạm ứng / Hoàn ứng không sửa trực tiếp được (vì liên quan 2 sổ Sở hữu).\n\nHãy XÓA giao dịch này rồi tạo lại bằng nút "⇄ Tạm ứng / Hoàn ứng" — số dư 2 sổ sẽ tự hoàn đúng.'); return; }
   const accOpts='<option value="">— Không chọn —</option>'+DB.accounts.slice().sort((a,b)=>a.cls.localeCompare(b.cls)).map(a=>`<option value="${a.id}">${a.name} · ${a.cls} · ${a.owner}</option>`).join('');
   const owners=allOwners();
   openModal(`<button class="close" onclick="closeModal()">×</button><h2>Sửa giao dịch</h2>
@@ -1826,6 +1847,87 @@ function updateMvQtyBox(){
     document.getElementById('mvQtyHint').textContent='Đang có '+p.qty+' '+p.unit+' · giá vốn '+VND.format(p.cost)+'/'+p.unit+' · sẽ tự cập nhật số lượng cho "'+p.key+'"';
   } else { box.style.display='none'; const q=document.getElementById('mvQty'); if(q)q.value=''; }
 }
+/* ===== TẠM ỨNG / HOÀN ỨNG — chuyển giữa 2 sổ Sở hữu, KHÔNG đụng số dư tài khoản =====
+   Bản ghi: {type:'Chuyển', grp:'CSH', category:'Tạm ứng'|'Hoàn ứng',
+             owner: bên GIẢM, ownerTo: bên TĂNG, amount, date, note, m:1}
+   ownerNetEffect() trả 0 cho type 'Chuyển' nên không bị cộng trùng;
+   số dư 2 sổ được cộng/trừ tường minh ở saveAdvance() và hoàn lại ở delTx(). */
+window.advanceModal=()=>{
+  const owners=allOwners();
+  const opt=sel=>owners.map(o=>`<option ${o===sel?'selected':''}>${o}</option>`).join('');
+  openModal(`<button class="close" onclick="closeModal()">×</button><h2>Tạm ứng / Hoàn ứng</h2>
+    <div class="seg" id="advSeg">
+      <button class="on" data-a="Tạm ứng" onclick="setAdv('Tạm ứng')">Tạm ứng</button>
+      <button data-a="Hoàn ứng" onclick="setAdv('Hoàn ứng')">Hoàn ứng</button></div>
+    <div class="mini" id="advHint" style="margin:8px 0 2px"></div>
+    <div class="field" style="margin-top:10px"><label>Ngày</label><input id="advDate" type="date" value="${todayISO()}"></div>
+    <div class="field"><label id="advFromLbl">Từ sổ (giảm)</label><select id="advFrom"><option value="">— Chọn quỹ / sổ —</option>${opt('')}</select></div>
+    <div class="field"><label id="advToLbl">Đến sổ (tăng)</label><select id="advTo">${opt('Cá nhân')}</select></div>
+    <div class="field"><label>Số tiền (₫)</label><input id="advAmt" type="text" inputmode="numeric" oninput="fmtInput(this)"></div>
+    <div class="field"><label>Ghi chú</label><input id="advNote" placeholder="VD: tạm ứng mua vật tư đề tài"></div>
+    <div class="note" style="margin-bottom:12px">Số dư tài khoản (Techcombank, VP bank…) <b>không thay đổi</b> — tiền vẫn nằm nguyên chỗ cũ, chỉ đổi sổ Sở hữu.</div>
+    <button class="btn" style="width:100%" onclick="saveAdvance()">Lưu</button>`);
+  window._advMode='Tạm ứng'; setAdv('Tạm ứng');
+};
+window.setAdv=(m)=>{
+  window._advMode=m;
+  document.querySelectorAll('#advSeg button').forEach(b=>b.classList.toggle('on', b.dataset.a===m));
+  const h=document.getElementById('advHint');
+  if(h) h.textContent = m==='Tạm ứng'
+    ? 'Quỹ cho ứng trước → người/sổ nhận. Sẽ ghi nhận là khoản còn phải hoàn.'
+    : 'Trả lại tiền đã ứng → trừ dần khoản còn phải hoàn.';
+  const f=document.getElementById('advFromLbl'), t=document.getElementById('advToLbl');
+  if(f) f.textContent = m==='Tạm ứng' ? 'Quỹ cho ứng (giảm)' : 'Người/sổ hoàn trả (giảm)';
+  if(t) t.textContent = m==='Tạm ứng' ? 'Người/sổ nhận ứng (tăng)' : 'Quỹ nhận lại (tăng)';
+};
+window.saveAdvance=()=>{
+  const amt=parseNum(document.getElementById('advAmt').value);
+  const from=document.getElementById('advFrom').value;
+  const to=document.getElementById('advTo').value;
+  const date=document.getElementById('advDate').value;
+  const note=(document.getElementById('advNote').value||'').trim();
+  const kind=window._advMode||'Tạm ứng';
+  if(!amt){ alert('Nhập số tiền.'); return; }
+  if(!from||!to){ alert('Chọn đủ 2 sổ Sở hữu.'); return; }
+  if(from===to){ alert('Hai sổ phải khác nhau.'); return; }
+  const tx={id:uid(),date,type:'Chuyển',grp:'CSH',category:kind,amount:amt,
+    owner:from, ownerTo:to, source:'', dest:'',
+    note:(note?note+' · ':'')+from+' → '+to, m:1};
+  DB.transactions.push(tx);
+  applyOwnerDelta(from,-amt); applyOwnerDelta(to, amt);
+  save(); closeModal(); renderAll();
+};
+/* Tổng hợp dư nợ tạm ứng: key = "quỹ|người", + khi tạm ứng, − khi hoàn ứng */
+function advanceOutstanding(){
+  const m={};
+  (DB.transactions||[]).filter(t=>t.grp==='CSH').forEach(t=>{
+    const amt=parseNum(t.amount);
+    const key = t.category==='Hoàn ứng' ? (t.ownerTo||'')+'|'+(t.owner||'') : (t.owner||'')+'|'+(t.ownerTo||'');
+    if(!m[key]) m[key]={quy:key.split('|')[0], nguoi:key.split('|')[1], ung:0, hoan:0};
+    if(t.category==='Hoàn ứng') m[key].hoan+=amt; else m[key].ung+=amt;
+  });
+  return Object.entries(m).map(([k,v])=>({...v, con:v.ung-v.hoan}))
+    .filter(v=>Math.round(v.con)!==0).sort((a,b)=>Math.abs(b.con)-Math.abs(a.con));
+}
+function renderAdvances(){
+  const box=document.getElementById('advanceBox'); if(!box) return;
+  const rows=advanceOutstanding();
+  if(!rows.length){
+    const co=(DB.transactions||[]).some(t=>t.grp==='CSH');
+    box.innerHTML='<div class="mini">'+(co?'Đã hoàn ứng đủ — không còn khoản nào treo.':'Chưa có giao dịch tạm ứng nào. Bấm "⇄ Tạm ứng / Hoàn ứng" để tạo.')+'</div>';
+    return;
+  }
+  const tong=rows.reduce((s,r)=>s+r.con,0);
+  box.innerHTML='<table><tbody>'+rows.map(r=>`<tr style="cursor:pointer" onclick="showAdvanceTx('${_q(r.quy)}','${_q(r.nguoi)}')">
+    <td>${r.nguoi} ›<div class="mini">còn nợ ${r.quy} · đã ứng ${fmt(r.ung)}${r.hoan?' · đã hoàn '+fmt(r.hoan):''}</div></td>
+    <td class="num" style="color:${r.con>0?'var(--red)':'var(--green)'}">${fmt(r.con)}</td></tr>`).join('')
+    +'</tbody></table><div class="row" style="justify-content:space-between;margin-top:10px;font-size:15px"><b>Tổng còn phải hoàn</b><b style="color:var(--red)">'+fmt(tong)+'</b></div>';
+}
+window.showAdvanceTx=(quy,nguoi)=>{
+  const l=(DB.transactions||[]).filter(t=>t.grp==='CSH' &&
+    ((t.owner===quy&&t.ownerTo===nguoi)||(t.owner===nguoi&&t.ownerTo===quy)));
+  showTxList('Tạm ứng: '+quy+' ↔ '+nguoi, l);
+};
 window.transferModal=()=>{
   const opts=DB.accounts.filter(a=>a.value!==0||true).sort((a,b)=>a.cls.localeCompare(b.cls)).map(a=>`<option value="${a.id}">${a.name} (${a.cls}) · ${fmtShort(a.value)}</option>`).join('');
   openModal(`<button class="close" onclick="closeModal()">×</button><h2>Chuyển / Mua · Bán tài sản</h2>
@@ -1942,7 +2044,7 @@ window.saveAcct=id=>{
 
 /* ================= IMPORT / EXPORT ================= */
 window.exportJSON=()=>{ dl(JSON.stringify(DB,null,2),'tai-chinh-phanluu-'+todayISO()+'.json','application/json'); };
-const GRP_LBL={SH:'Chi sinh hoạt',TS:'Mua tài sản/ĐT',CH:'Chuyển nguồn',Thu:'Thu nhập'};
+const GRP_LBL={SH:'Chi sinh hoạt',TS:'Mua tài sản/ĐT',CH:'Chuyển nguồn',CSH:'Tạm ứng / Hoàn ứng',Thu:'Thu nhập'};
 function txExportRows(){
   return DB.transactions.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(t=>({
     'Ngày':t.date,'Loại':t.type,'Nhóm':GRP_LBL[t.grp||'']||'','Danh mục':t.category||'',
@@ -2125,7 +2227,7 @@ function activeView(){ const t=document.querySelector('.tab.active'); return t?t
 function renderAll(){
   // Cập nhật TẤT CẢ các tab để mọi con số luôn khớp khi có giao dịch mới,
   // không phải chờ bấm sang tab đó mới thấy đổi.
-  [renderDash,renderTx,renderAssets,renderFI,renderReport].forEach(fn=>{ try{ fn(); }catch(e){ console.warn('render',fn.name,e); } });
+  [renderDash,renderTx,renderAssets,renderFI,renderReport,renderAdvances].forEach(fn=>{ try{ fn(); }catch(e){ console.warn('render',fn.name,e); } });
   if(activeView()==='data'){ try{ renderData(); }catch(e){} }
   const nm=document.getElementById('netMini'); if(nm) nm.textContent=fmtShort(assetTotal());
 }
