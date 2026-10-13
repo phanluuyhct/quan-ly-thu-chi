@@ -1207,10 +1207,52 @@ function renderTx(){
   }).join('')
     : '<div class="empty">Chưa có giao dịch trong kỳ này.</div>';
 }
-window.delTx=id=>{ const t=DB.transactions.find(x=>x.id===id);
-  if(t&&t.grp==='CSH'){ const a=parseNum(t.amount); applyOwnerDelta(t.owner,a); applyOwnerDelta(t.ownerTo,-a); }   // hoàn lại 2 sổ
-  else if(t&&t.m===1){ const eff=ownerNetEffect(t); if(eff) applyOwnerDelta(t.owner,-eff); }
-  DB.transactions=DB.transactions.filter(x=>x.id!==id); save(); renderAll(); };
+window.delTx=id=>{
+  const t=DB.transactions.find(x=>x.id===id); if(!t) return;
+  const amt=parseNum(t.amount);
+  const byId=i=>i?DB.accounts.find(a=>a.id===i):null;
+  const byName=n=>n?DB.accounts.find(a=>a.name===n):null;
+  const srcA=byId(t.accId)||byName(t.source);
+  const dstA=byId(t.accTo)||byName(t.dest);
+
+  /* Có phải hoàn số dư tài khoản không?
+     af===1: lúc lưu CÓ trừ số dư  |  af===0: lúc lưu KHÔNG trừ
+     af undefined: bản ghi cũ, app không biết -> hỏi người dùng */
+  let doAcc=false, hoiCu=false;
+  if(t.grp!=='CSH'){
+    if(t.af===1) doAcc=true;
+    else if(t.af===undefined && (srcA||dstA)) { doAcc=true; hoiCu=true; }
+  }
+
+  // Mô tả những gì sẽ được hoàn lại, để người dùng xác nhận
+  const vc=[];
+  if(doAcc){
+    if(t.grp==='CH'){ if(srcA) vc.push(`${srcA.name}: +${fmt(amt)}`); if(dstA) vc.push(`${dstA.name}: −${fmt(amt)}`); }
+    else if(t.type==='Chi'&&srcA) vc.push(`${srcA.name}: +${fmt(amt)}`);
+    else if(t.type==='Thu'&&srcA) vc.push(`${srcA.name}: −${fmt(amt)}`);
+  }
+  if(t.grp==='CSH'){ vc.push(`sổ ${t.owner}: +${fmt(amt)}`); vc.push(`sổ ${t.ownerTo}: −${fmt(amt)}`); }
+  else { const eff=(t.m===1)?ownerNetEffect(t):0; if(eff) vc.push(`sổ ${t.owner}: ${eff>0?'−':'+'}${fmt(Math.abs(eff))}`); }
+
+  let msg=`Xóa giao dịch ${t.date.split('-').reverse().join('/')} · ${t.category||'—'} · ${fmt(amt)}?`;
+  if(vc.length) msg+=`\n\nSẽ hoàn lại:\n• ${vc.join('\n• ')}`;
+  if(hoiCu) msg+=`\n\n(Đây là bản ghi cũ nên app không chắc lúc lưu có trừ số dư tài khoản hay không. Nếu lúc đó chị KHÔNG tích "Tự cập nhật số dư", hãy bấm Cancel rồi xóa lại bằng nút ✕ sau khi bỏ tích — hoặc chỉnh tay số dư sau.)`;
+  if(!confirm(msg)) return;
+
+  // 1) Hoàn sổ Sở hữu
+  if(t.grp==='CSH'){ applyOwnerDelta(t.owner,amt); applyOwnerDelta(t.ownerTo,-amt); }
+  else if(t.m===1){ const eff=ownerNetEffect(t); if(eff) applyOwnerDelta(t.owner,-eff); }
+
+  // 2) Hoàn số dư tài khoản
+  if(doAcc){
+    if(t.grp==='CH'){ if(srcA) srcA.value+=amt; if(dstA) dstA.value-=amt; }
+    else if(t.type==='Chi'){ if(srcA) srcA.value+=amt; }
+    else if(t.type==='Thu'){ if(srcA) srcA.value-=amt; }
+  }
+
+  DB.transactions=DB.transactions.filter(x=>x.id!==id); save(); renderAll();
+  if(t.pq) alert('Lưu ý: giao dịch này có cập nhật SỐ LƯỢNG (vàng/bạc/ngoại tệ). App đã hoàn lại số tiền nhưng KHÔNG tự hoàn số lượng — chị vào tab Tài sản chỉnh lại số lượng / giá vốn cho đúng.');
+};
 window.clearTxFilters=()=>{ ['fType','fGrp','fSrc','fOwner','fSubOwner','fMonth','fFrom','fTo','fQuick'].forEach(id=>{const e=document.getElementById(id); if(e)e.value='';}); FCAT_SEL=new Set(); updateCatBtn(); renderTx(); };
 window.txShowCat=(cat)=>{ const l=currentTxList().filter(t=>((t.type==='Chi'&&(t.grp==='SH'||!t.grp))||t.type==='Thu')&&(t.category||'Khác')===cat); const mo=document.getElementById('fMonth').value; showTxList('Danh mục: '+cat+(mo?' · '+mo:''), l); };
 /* Modal liệt kê danh sách giao dịch (dùng cho drill-down Báo cáo) */
@@ -1242,7 +1284,7 @@ window.showTxDetail=id=>{
     ${t.dest?`<div class="kv"><span>Đến tài khoản</span><b>${t.dest}</b></div>`:''}
     <div class="kv"><span>Chủ sở hữu</span><b>${t.owner||'—'}</b></div>
     <div class="kv"><span>Nội dung</span><b style="max-width:60%;text-align:right">${t.note||'—'}</b></div>
-    <div class="row" style="margin-top:16px"><button class="btn" style="flex:1" onclick="editTx('${t.id}')">✎ Sửa</button><button class="btn red" style="flex:1" onclick="if(confirm('Xóa giao dịch này?')){delTx('${t.id}');closeModal();}">🗑 Xóa</button></div>`);
+    <div class="row" style="margin-top:16px"><button class="btn" style="flex:1" onclick="editTx('${t.id}')">✎ Sửa</button><button class="btn red" style="flex:1" onclick="delTx('${t.id}');closeModal();">🗑 Xóa</button></div>`);
 };
 window.editTx=id=>{
   const t=DB.transactions.find(x=>x.id===id); if(!t)return;
@@ -1283,10 +1325,29 @@ window.saveEditTx=id=>{
   const srcAcc=srcId?DB.accounts.find(a=>a.id===srcId):null;
   const wasManual=t.m===1;
   const oldEff=wasManual?ownerNetEffect(t):0, oldOwner=t.owner;   // tác động cũ trước khi sửa
-  t.type=window._etType; t.date=document.getElementById('etDate').value; t.amount=amt;
+
+  /* --- Số dư tài khoản: gỡ tác động CŨ rồi áp tác động MỚI --- */
+  const oldAmt=parseNum(t.amount), oldType=t.type;
+  const oldAcc=(t.accId?DB.accounts.find(a=>a.id===t.accId):null)
+             ||(t.source?DB.accounts.find(a=>a.name===t.source):null);
+  const oldAf = (t.af===1) || (t.af===undefined && !!oldAcc);   // bản ghi cũ: coi như có trừ
+  const newType=window._etType;
+  const canAcc = oldType!=='Chuyển' && newType!=='Chuyển';       // giao dịch Chuyển có 2 đầu, không xử ở đây
+  if(canAcc && oldAf && oldAcc){
+    if(oldType==='Chi') oldAcc.value+=oldAmt; else if(oldType==='Thu') oldAcc.value-=oldAmt;
+  }
+
+  t.type=newType; t.date=document.getElementById('etDate').value; t.amount=amt;
   let ecv=document.getElementById('etCat').value; if(ecv==='__newcat__')ecv=''; t.category=ecv; t.source=srcAcc?srcAcc.name:'';
   let eov=document.getElementById('etOwner').value; if(eov==='__new__')eov=''; t.owner=eov.trim(); t.note=document.getElementById('etNote').value;
   if(wasManual){ if(oldEff) applyOwnerDelta(oldOwner,-oldEff); const ne=ownerNetEffect(t); if(ne) applyOwnerDelta(t.owner,ne); }
+
+  if(canAcc){
+    if(srcAcc){ if(t.type==='Chi') srcAcc.value-=amt; else if(t.type==='Thu') srcAcc.value+=amt; t.af=1; t.accId=srcAcc.id; }
+    else { t.af=0; t.accId=''; }
+  } else {
+    alert('Lưu ý: giao dịch loại "Chuyển" có 2 tài khoản nên app KHÔNG tự chỉnh số dư khi sửa. Chị kiểm tra lại số dư 2 tài khoản, hoặc xóa rồi tạo lại bằng nút "⇄ Chuyển / Mua-Bán".');
+  }
   save(); closeModal(); renderAll();
 };
 
@@ -1806,12 +1867,14 @@ window.saveTx=()=>{
     if(srcAcc===destAcc){ alert('Hai tài khoản phải khác nhau.'); return; }
     if(affect){ srcAcc.value-=amt; destAcc.value+=amt; }
     tx={id:uid(),date,type:'Chuyển',category:'Chuyển nguồn',amount:amt,grp:'CH',
+      af:affect?1:0, accId:srcAcc.id, accTo:destAcc.id,
       owner:srcAcc.owner,source:srcAcc.name,dest:destAcc.name,note:(note?note+' · ':'')+srcAcc.name+' → '+destAcc.name};
     DB.transactions.push(tx);
   } else {
     let ownv=document.getElementById('txOwner').value; if(ownv==='__new__')ownv='';
     let catv=document.getElementById('txCat').value; if(catv==='__newcat__')catv='';
     tx={id:uid(),date,type,category:catv,amount:amt,grp:(type==='Thu'?'Thu':'SH'),
+      af:(srcAcc&&affect)?1:0, accId:srcAcc?srcAcc.id:'',
       owner:ownv,source:srcAcc?srcAcc.name:'',note,m:1};
     DB.transactions.push(tx);
     if(srcAcc&&affect){ if(type==='Chi') srcAcc.value-=amt; else if(type==='Thu') srcAcc.value+=amt; }
@@ -1994,11 +2057,11 @@ window.saveTransfer=()=>{
   const date=document.getElementById('mvDate').value, note=document.getElementById('mvNote').value;
   const cat={'Chuyển':'Chuyển nguồn','Mua':'Mua tài sản','Bán':'Bán tài sản','Tất toán':'Tất toán sổ'}[mode];
   const pushed=[];
-  const t1={id:uid(),date,type:'Chuyển',category:cat,amount:amt,grp:'CH',owner:from.owner,source:from.name,dest:to.name,note:(note?note+' · ':'')+from.name+' → '+to.name};
+  const t1={id:uid(),date,type:'Chuyển',category:cat,amount:amt,grp:'CH',af:1,accId:from.id,accTo:to.id,pq:(qty>0?1:0),owner:from.owner,source:from.name,dest:to.name,note:(note?note+' · ':'')+from.name+' → '+to.name};
   DB.transactions.push(t1); pushed.push(t1);
   if((mode==='Bán'||mode==='Tất toán')&&gain){
     to.value+=gain;
-    const t2={id:uid(),date,type:gain>=0?'Thu':'Chi',category:gain>=0?'Lãi Đầu tư':'Lỗ Đầu tư',amount:Math.abs(gain),grp:gain>=0?'Thu':'TS',owner:to.owner,source:to.name,note:(mode==='Tất toán'?'Lãi tất toán ':'Lãi/lỗ bán ')+from.name};
+    const t2={id:uid(),date,type:gain>=0?'Thu':'Chi',category:gain>=0?'Lãi Đầu tư':'Lỗ Đầu tư',amount:Math.abs(gain),grp:gain>=0?'Thu':'TS',af:1,accId:to.id,owner:to.owner,source:to.name,note:(mode==='Tất toán'?'Lãi tất toán ':'Lãi/lỗ bán ')+from.name};
     DB.transactions.push(t2); pushed.push(t2);
   }
   save(); closeModal(); renderAll();
