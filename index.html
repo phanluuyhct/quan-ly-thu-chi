@@ -162,6 +162,15 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 <!-- ============ DASHBOARD ============ -->
 <section class="view active" id="v-dash">
   <div id="maturityBanner"></div>
+  <div class="card" style="margin-top:16px">
+    <div class="toolbar">
+      <h3 style="margin:0;flex:1">Học phí · <span id="hpMonthLbl"></span></h3>
+      <button class="btn sm ghost" onclick="hpNav(-1)">‹</button>
+      <button class="btn sm ghost" onclick="hpNav(1)">›</button>
+      <button class="btn sm ghost" onclick="hpSettings()">⚙ Lớp</button>
+    </div>
+    <div id="hpBox"></div>
+  </div>
   <div class="grid g4" style="margin-top:16px">
     <div class="card full">
       <h3>Tổng tài sản ròng (Quỹ)</h3>
@@ -485,6 +494,20 @@ const SEED = {
   ]
 };
 
+/* ===== Danh sách lớp học thêm (theo dõi học phí hằng tháng) ===== */
+const SEED_TUITION=[
+  {id:'ct-phap',   child:'Cẩm Tú',      subject:'Tiếng Pháp',        teacher:'Mme Trang',            amount:1500000, freq:'M', active:1},
+  {id:'ct-lyhoa',  child:'Cẩm Tú',      subject:'Lý - Hóa',          teacher:'Tri thức NP',          amount:0,       freq:'K', active:1},
+  {id:'ct-toan',   child:'Cẩm Tú',      subject:'Toán',              teacher:'Thầy Đặng Hoàng Dư',   amount:0,       freq:'K', active:1},
+  {id:'ct-dgnl',   child:'Cẩm Tú',      subject:'Đánh giá năng lực', teacher:'VETA',                 amount:0,       freq:'K', active:1},
+  {id:'ct-delf',   child:'Cẩm Tú',      subject:'DELF',              teacher:'(đóng khi thi)',       amount:0,       freq:'K', active:1},
+  {id:'mp-phap',   child:'Minh Phương', subject:'Tiếng Pháp',        teacher:'Mme Trang',            amount:1800000, freq:'M', active:1},
+  {id:'mp-van',    child:'Minh Phương', subject:'Văn',               teacher:'Thầy Huy (Hải Phúc)',  amount:800000,  freq:'M', active:1},
+  {id:'mp-toan',   child:'Minh Phương', subject:'Toán',              teacher:'Cô Diễm Phương',       amount:1000000, freq:'M', active:1},
+  {id:'mp-toannc', child:'Minh Phương', subject:'Toán Pháp',         teacher:'Cô Trang',             amount:600000,  freq:'M', active:1},
+  {id:'mp-khtn',   child:'Minh Phương', subject:'KHTN',              teacher:'Cô Ngọc Anh',          amount:800000,  freq:'M', active:1}
+];
+
 const CLS_ORDER=['Đầu tư','Kim loại','Tiết kiệm','BHNT','Ngoại tệ','Thanh toán','Tiền mặt','Tín dụng'];
 const CLS_COLOR={'Đầu tư':'#4f9cf9','Kim loại':'#e0b64a','Tiết kiệm':'#37c2a8','BHNT':'#a887f4','Ngoại tệ':'#5ad1c0','Thanh toán':'#6f8fb0','Tiền mặt':'#f2b84b','Tín dụng':'#f0665f'};
 const TARGET={'Tiết kiệm':40,'Kim loại':30,'Đầu tư':20,'Ngoại tệ':5,'Tiền mặt':5};
@@ -530,6 +553,7 @@ function load(){
   if(!DB.prices) DB.prices=structuredClone(SEED.prices);
   if(!DB.snapshots) DB.snapshots=structuredClone(SEED.snapshots);
   if(!DB.ownerGroups) DB.ownerGroups={};   // nhóm cho các chủ sở hữu tự thêm
+  if(!DB.tuition) DB.tuition=structuredClone(SEED_TUITION);   // danh sách lớp học thêm
 }
 /* Ghi 1 mốc net worth cho tháng hiện tại (cập nhật nếu đã có) */
 function recordSnapshot(){
@@ -1986,6 +2010,160 @@ function renderAdvances(){
     <td class="num" style="color:${r.con>0?'var(--red)':'var(--green)'}">${fmt(r.con)}</td></tr>`).join('')
     +'</tbody></table><div class="row" style="justify-content:space-between;margin-top:10px;font-size:15px"><b>Tổng còn phải hoàn</b><b style="color:var(--red)">'+fmt(tong)+'</b></div>';
 }
+/* ===================== HỌC PHÍ · theo dõi theo tháng ===================== */
+window._hpMonth=null;
+function hpMonth(){ if(!window._hpMonth) window._hpMonth=todayISO().slice(0,7); return window._hpMonth; }
+window.hpNav=d=>{
+  const [y,m]=hpMonth().split('-').map(Number);
+  const dt=new Date(y, m-1+d, 1);
+  window._hpMonth=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+  renderTuition();
+};
+function hpClasses(){ return (DB.tuition||[]).filter(c=>c.active!==0); }
+/* Map: classId -> [giao dịch đã gắn nhãn lớp đó trong tháng ym] */
+function hpPaidMap(ym){
+  const m={};
+  (DB.transactions||[]).forEach(t=>{
+    if(!Array.isArray(t.hp)||!t.hp.length) return;
+    // hpM = tháng mà khoản này ĐÓNG CHO (nếu khác tháng chuyển tiền, vd đóng trước/đóng bù)
+    if((t.hpM||String(t.date||'').slice(0,7))!==ym) return;
+    t.hp.forEach(id=>{ (m[id]=m[id]||[]).push(t); });
+  });
+  return m;
+}
+function renderTuition(){
+  const box=document.getElementById('hpBox'); if(!box) return;
+  const ym=hpMonth(), lbl=document.getElementById('hpMonthLbl');
+  if(lbl) lbl.textContent='tháng '+ym.slice(5)+'/'+ym.slice(0,4);
+  const cls=hpClasses();
+  if(!cls.length){ box.innerHTML='<div class="mini">Chưa có lớp nào. Bấm "⚙ Lớp" để thêm.</div>'; return; }
+  const paid=hpPaidMap(ym);
+  const kids=[...new Set(cls.map(c=>c.child))];
+  let canDong=0, daDong=0, html='';
+  kids.forEach(kid=>{
+    const rows=cls.filter(c=>c.child===kid);
+    html+=`<div class="mini" style="margin:10px 0 4px;font-weight:700;color:var(--accent)">${kid}</div><table><tbody>`;
+    rows.forEach(c=>{
+      const ds=paid[c.id]||[];
+      const da=ds.length>0;
+      const thang=c.freq==='M';
+      if(thang){ canDong+=parseNum(c.amount); if(da) daDong+=parseNum(c.amount); }
+      // Hiển thị: ưu tiên mức học phí đã khai của lớp; lớp "theo kỳ" thì lấy số thực đã đóng
+      const tien=parseNum(c.amount) || (da ? ds.reduce((s,t)=>s+parseNum(t.amount)/Math.max(1,(t.hp||[]).length),0) : 0);
+      const chip = da
+        ? `<span style="color:var(--green)">✓ ${ds[0].date.slice(8)}/${ds[0].date.slice(5,7)}</span>`
+        : (thang?`<span style="color:var(--red)">chưa đóng</span>`:`<span class="mini">theo kỳ</span>`);
+      html+=`<tr style="cursor:pointer" onclick="${da?`hpShowTx('${c.id}')`:`hpPay('${c.id}')`}">
+        <td>${c.subject}${da?'':' ›'}<div class="mini">${c.teacher||''} · ${chip}</div></td>
+        <td class="num" style="color:${da?'var(--green)':(thang?'var(--red)':'var(--muted)')}">${tien?fmt(Math.round(tien)):'—'}</td></tr>`;
+    });
+    html+='</tbody></table>';
+  });
+  const thieu=canDong-daDong;
+  html+=`<div class="row" style="justify-content:space-between;margin-top:12px;font-size:15px">
+    <b>Lớp hằng tháng: đã đóng ${fmt(daDong)}</b>
+    <b style="color:${thieu>0?'var(--red)':'var(--green)'}">${thieu>0?'còn thiếu '+fmt(thieu):'đã đủ'}</b></div>
+  <div class="mini" style="margin-top:6px">Bấm một lớp <b>chưa đóng</b> để ghi khoản đóng (có thể tích nhiều lớp trong cùng một lần chuyển tiền). Bấm lớp <b>đã đóng</b> để xem giao dịch.</div>`;
+  box.innerHTML=html;
+}
+window.hpShowTx=id=>{
+  const c=(DB.tuition||[]).find(x=>x.id===id); if(!c) return;
+  const l=(DB.transactions||[]).filter(t=>Array.isArray(t.hp)&&t.hp.includes(id));
+  showTxList('Học phí: '+c.child+' · '+c.subject, l);
+};
+window.hpPay=id=>{
+  const ym=hpMonth(), paid=hpPaidMap(ym);
+  const chuaDong=hpClasses().filter(c=>!(paid[c.id]||[]).length);
+  const accs=DB.accounts.slice().sort((a,b)=>a.cls.localeCompare(b.cls))
+    .map(a=>`<option value="${a.id}">${a.name} · ${fmtShort(a.value)}</option>`).join('');
+  const ticks=chuaDong.map(c=>`<label class="row" style="gap:8px;padding:6px 0;cursor:pointer">
+      <input type="checkbox" class="hpTick" value="${c.id}" data-amt="${parseNum(c.amount)}" ${c.id===id?'checked':''} onchange="hpSum()">
+      <span style="flex:1">${c.child} · ${c.subject}<div class="mini">${c.teacher||''}</div></span>
+      <span class="mini">${c.amount?fmt(parseNum(c.amount)):'—'}</span></label>`).join('');
+  openModal(`<button class="close" onclick="closeModal()">×</button><h2>Ghi khoản đóng học phí</h2>
+    <div class="mini" style="margin-bottom:10px">Ghi cho <b>tháng ${ym.slice(5)}/${ym.slice(0,4)}</b> (dù ngày chuyển tiền có thể khác). Tích tất cả các lớp mà <b>một lần chuyển tiền</b> này chi trả.</div>
+    <div style="background:var(--panel2);padding:10px;border-radius:10px;margin-bottom:12px;max-height:38vh;overflow:auto">${ticks||'<div class="mini">Tháng này đã đóng đủ các lớp.</div>'}</div>
+    <div class="field"><label>Ngày đóng</label><input id="hpDate" type="date" value="${ym===todayISO().slice(0,7)?todayISO():ym+'-01'}"></div>
+    <div class="field"><label>Số tiền (₫)</label><input id="hpAmt" type="text" inputmode="numeric" oninput="fmtInput(this)"></div>
+    <div class="field"><label>Trừ vào tài khoản</label><select id="hpAcc">${accs}</select></div>
+    <div class="field"><label><input type="checkbox" id="hpAffect" checked> Tự cập nhật số dư tài khoản</label></div>
+    <div class="field"><label>Ghi chú</label><input id="hpNote" placeholder="VD: chuyển khoản Mme Trang"></div>
+    <button class="btn" style="width:100%" onclick="hpSavePay()">Lưu khoản đóng</button>`);
+  hpSum();
+};
+window.hpSum=()=>{
+  let s=0; document.querySelectorAll('.hpTick:checked').forEach(e=>s+=parseInt(e.dataset.amt,10)||0);
+  const el=document.getElementById('hpAmt'); if(el) el.value=s?VND.format(s):'';
+};
+window.hpSavePay=()=>{
+  const ids=[...document.querySelectorAll('.hpTick:checked')].map(e=>e.value);
+  if(!ids.length){ alert('Chọn ít nhất một lớp.'); return; }
+  const amt=parseNum(document.getElementById('hpAmt').value);
+  if(!amt){ alert('Nhập số tiền.'); return; }
+  const date=document.getElementById('hpDate').value;
+  const acc=DB.accounts.find(a=>a.id===document.getElementById('hpAcc').value);
+  const affect=document.getElementById('hpAffect').checked;
+  const note=document.getElementById('hpNote').value.trim();
+  const ten=ids.map(i=>{const c=(DB.tuition||[]).find(x=>x.id===i); return c?c.child.split(' ').map(w=>w[0]).join('')+' '+c.subject:'';}).join(' + ');
+  const tx={id:uid(),date,type:'Chi',category:'Học phí',amount:amt,grp:'SH',
+    af:(acc&&affect)?1:0, accId:acc?acc.id:'', owner:'Cá nhân', source:acc?acc.name:'',
+    note:(note?note+' · ':'')+ten, m:1, hp:ids, hpM:hpMonth()};
+  DB.transactions.push(tx);
+  if(acc&&affect) acc.value-=amt;
+  applyOwnerDelta('Cá nhân', -amt);
+  save(); closeModal(); renderAll();
+};
+/* ---- Quản lý danh sách lớp ---- */
+window.hpSettings=()=>{
+  const rows=(DB.tuition||[]).map(c=>`<tr><td>${c.child} · ${c.subject}
+      <div class="mini">${c.teacher||''} · ${c.freq==='M'?'hằng tháng':'theo kỳ'}${c.active===0?' · <span style="color:var(--red)">đã nghỉ</span>':''}</div></td>
+    <td class="num">${c.amount?fmt(parseNum(c.amount)):'—'}</td>
+    <td class="num"><button class="btn sm ghost" onclick="hpClassForm('${c.id}')">✎</button></td></tr>`).join('');
+  openModal(`<button class="close" onclick="closeModal()">×</button><h2>Danh sách lớp học thêm</h2>
+    <table><tbody>${rows||'<tr><td class="mini">Chưa có lớp nào.</td></tr>'}</tbody></table>
+    <button class="btn" style="width:100%;margin-top:12px" onclick="hpClassForm(null)">＋ Thêm lớp</button>`);
+};
+window.hpClassForm=id=>{
+  const c=id?(DB.tuition||[]).find(x=>x.id===id):{child:'',subject:'',teacher:'',amount:0,freq:'M',active:1};
+  if(!c) return;
+  const kids=[...new Set([...(DB.tuition||[]).map(x=>x.child), c.child].filter(Boolean))];
+  openModal(`<button class="close" onclick="closeModal()">×</button><h2>${id?'Sửa lớp':'Thêm lớp'}</h2>
+    <div class="field"><label>Con</label><input id="hcChild" list="hcKids" value="${c.child||''}" placeholder="VD: Minh Phương">
+      <datalist id="hcKids">${kids.map(k=>`<option value="${k}">`).join('')}</datalist></div>
+    <div class="field"><label>Môn học</label><input id="hcSubj" value="${c.subject||''}"></div>
+    <div class="field"><label>Giáo viên / nơi học</label><input id="hcTea" value="${c.teacher||''}"></div>
+    <div class="field"><label>Học phí mỗi tháng (₫) — để trống nếu đóng theo kỳ</label>
+      <input id="hcAmt" type="text" inputmode="numeric" value="${c.amount?VND.format(parseNum(c.amount)):''}" oninput="fmtInput(this)"></div>
+    <div class="field"><label>Kiểu đóng</label><select id="hcFreq">
+      <option value="M" ${c.freq!=='K'?'selected':''}>Hằng tháng (tính vào phần còn thiếu)</option>
+      <option value="K" ${c.freq==='K'?'selected':''}>Theo kỳ / khi thi (chỉ nhắc)</option></select></div>
+    <div class="field"><label><input type="checkbox" id="hcActive" ${c.active!==0?'checked':''}> Còn đang học</label></div>
+    <button class="btn" style="width:100%" onclick="hpSaveClass('${id||''}')">Lưu</button>
+    ${id?`<button class="btn ghost" style="width:100%;margin-top:8px;color:var(--red)" onclick="hpDelClass('${id}')">Xóa lớp này</button>`:''}`);
+};
+window.hpSaveClass=id=>{
+  const o={
+    child:document.getElementById('hcChild').value.trim(),
+    subject:document.getElementById('hcSubj').value.trim(),
+    teacher:document.getElementById('hcTea').value.trim(),
+    amount:parseNum(document.getElementById('hcAmt').value),
+    freq:document.getElementById('hcFreq').value,
+    active:document.getElementById('hcActive').checked?1:0
+  };
+  if(!o.child||!o.subject){ alert('Nhập tên con và môn học.'); return; }
+  if(!DB.tuition) DB.tuition=[];
+  if(id){ Object.assign(DB.tuition.find(x=>x.id===id), o); }
+  else DB.tuition.push({id:uid(), ...o});
+  save(); closeModal(); renderAll();
+};
+window.hpDelClass=id=>{
+  const c=(DB.tuition||[]).find(x=>x.id===id); if(!c) return;
+  const n=(DB.transactions||[]).filter(t=>Array.isArray(t.hp)&&t.hp.includes(id)).length;
+  if(!confirm('Xóa lớp "'+c.child+' · '+c.subject+'"?\n\n'+(n?n+' giao dịch đã gắn lớp này sẽ KHÔNG bị xóa, chỉ mất nhãn.\n\n':'')+'Nếu chỉ là tạm nghỉ, nên bỏ tích "Còn đang học" thay vì xóa.')) return;
+  DB.tuition=DB.tuition.filter(x=>x.id!==id);
+  save(); closeModal(); renderAll();
+};
+
 window.showAdvanceTx=(quy,nguoi)=>{
   const l=(DB.transactions||[]).filter(t=>t.grp==='CSH' &&
     ((t.owner===quy&&t.ownerTo===nguoi)||(t.owner===nguoi&&t.ownerTo===quy)));
@@ -2290,7 +2468,7 @@ function activeView(){ const t=document.querySelector('.tab.active'); return t?t
 function renderAll(){
   // Cập nhật TẤT CẢ các tab để mọi con số luôn khớp khi có giao dịch mới,
   // không phải chờ bấm sang tab đó mới thấy đổi.
-  [renderDash,renderTx,renderAssets,renderFI,renderReport,renderAdvances].forEach(fn=>{ try{ fn(); }catch(e){ console.warn('render',fn.name,e); } });
+  [renderDash,renderTx,renderAssets,renderFI,renderReport,renderAdvances,renderTuition].forEach(fn=>{ try{ fn(); }catch(e){ console.warn('render',fn.name,e); } });
   if(activeView()==='data'){ try{ renderData(); }catch(e){} }
   const nm=document.getElementById('netMini'); if(nm) nm.textContent=fmtShort(assetTotal());
 }
