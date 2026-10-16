@@ -266,6 +266,13 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
     <div class="card"><h3>Tổng tài sản</h3><div class="stat" id="aTotal"></div></div>
     <div class="card"><h3>Nợ tín dụng</h3><div class="stat" style="color:var(--red)" id="aDebt"></div></div>
   </div>
+  <div class="card" id="ganttCard" style="margin-top:14px;display:none">
+    <div class="toolbar"><h3 style="margin:0;flex:1">Lịch đáo hạn sổ tiết kiệm</h3>
+      <span class="mini" id="ganttSum"></span></div>
+    <div class="row" style="gap:12px;margin:2px 0 8px;flex-wrap:wrap" id="ganttLegend"></div>
+    <div style="overflow-x:auto"><svg id="ganttSvg" style="display:block;width:100%;min-width:660px;height:auto"></svg></div>
+    <div class="mini" style="margin-top:8px">Thanh đặc là kỳ hạn đã khai; thanh viền đứt là sổ chưa khai kỳ hạn nên chỉ vẽ được phần còn lại. Vạch đỏ là hôm nay. Bấm vào một sổ để sửa.</div>
+  </div>
   <div class="card" style="margin-top:14px">
     <div class="toolbar">
       <h3 style="margin:0;flex:1">Danh mục tài khoản</h3>
@@ -898,6 +905,75 @@ function renderMaturity(){
     <div class="mini" style="margin-top:8px">Bấm "Thêm vào Lịch Google" để tạo sự kiện đúng ngày đáo hạn — mở trên điện thoại sẽ vào ngay Lịch Google, anh bấm Lưu và đặt báo trước (vd 3 ngày) là xong.</div></div>`;
 }
 
+/* ===== Gantt lịch đáo hạn sổ tiết kiệm (tab Tài sản) ===== */
+const gEsc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const GANTT_COLORS={'Bệnh viện':'#4f9cf9','Người thân':'#f2b84b','Cá nhân':'#37c2a8','Khác':'#a887f4'};
+function ganttColor(owner){
+  const g=(DB.ownerGroups&&DB.ownerGroups[owner])||'Khác';
+  return GANTT_COLORS[g]||GANTT_COLORS['Khác'];
+}
+function renderGantt(){
+  const card=document.getElementById('ganttCard'), svg=document.getElementById('ganttSvg');
+  if(!card||!svg) return;
+  const t=new Date(todayISO()+'T00:00:00');
+  const rows=(DB.accounts||[]).filter(a=>a.daohan&&parseNum(a.value)>0).map(a=>{
+    const end=new Date(a.daohan+'T00:00:00');
+    const ky=parseInt(a.kyhan,10);
+    let start,uoc=false;
+    if(ky>0){ start=new Date(end); start.setMonth(start.getMonth()-ky); }
+    else { start=new Date(t); uoc=true; }
+    return {a,end,start,uoc,days:Math.round((end-t)/86400000),color:ganttColor(a.owner)};
+  }).sort((x,y)=>x.end-y.end);
+  if(!rows.length){ card.style.display='none'; return; }
+  card.style.display='';
+  const tong=rows.reduce((s,r)=>s+parseNum(r.a.value),0);
+  const sap=rows.filter(r=>r.days<=30);
+  document.getElementById('ganttSum').textContent=
+    `${rows.length} sổ · ${fmt(tong)}` + (sap.length?` · ${sap.length} sổ đáo hạn trong 30 ngày (${fmt(sap.reduce((s,r)=>s+parseNum(r.a.value),0))})`:'');
+  const nhom=[...new Set(rows.map(r=>(DB.ownerGroups&&DB.ownerGroups[r.a.owner])||'Khác'))];
+  document.getElementById('ganttLegend').innerHTML=nhom.map(g=>
+    `<span class="mini" style="display:inline-flex;align-items:center;gap:6px"><i style="width:11px;height:11px;border-radius:3px;background:${GANTT_COLORS[g]||GANTT_COLORS['Khác']};display:inline-block"></i>${g}</span>`).join('');
+
+  // trục thời gian: từ đầu tháng của mốc sớm nhất tới cuối tháng của mốc muộn nhất
+  let lo=new Date(Math.min(t, ...rows.map(r=>+r.start)));
+  let hi=new Date(Math.max(...rows.map(r=>+r.end)));
+  lo=new Date(lo.getFullYear(),lo.getMonth(),1);
+  hi=new Date(hi.getFullYear(),hi.getMonth()+1,1);
+  const W=1000, ML=236, MR=96, MT=34, RH=40, MB=30;
+  const H=MT+rows.length*RH+MB;
+  const pw=W-ML-MR, X=d=>ML+(d-lo)/(hi-lo)*pw;
+  const dmy=d=>d.split('-').reverse().join('/');
+  let s='';
+  for(let d=new Date(lo); d<=hi; d.setMonth(d.getMonth()+1)){
+    const px=X(d);
+    s+=`<line x1="${px.toFixed(1)}" x2="${px.toFixed(1)}" y1="${MT-14}" y2="${MT+rows.length*RH}" stroke="var(--line)" stroke-width="1"/>`;
+    s+=`<text x="${(px+4).toFixed(1)}" y="${MT-18}" fill="var(--muted)" font-size="11">T${d.getMonth()+1}/${String(d.getFullYear()).slice(2)}</text>`;
+  }
+  rows.forEach((r,i)=>{
+    const y=MT+i*RH, by=y+8, bh=16;
+    const x0=Math.max(ML,X(r.start)), x1=X(r.end);
+    const qua=r.days<0;
+    const nhan=qua?`quá hạn ${-r.days} ngày`:(r.days===0?'hôm nay':`còn ${r.days} ngày`);
+    s+=`<text x="0" y="${(by+7).toFixed(1)}" fill="var(--txt)" font-size="12.5" font-weight="500">${gEsc(r.a.name).slice(0,34)}</text>`;
+    s+=`<text x="0" y="${(by+21).toFixed(1)}" fill="var(--muted)" font-size="11">${gEsc(r.a.owner||'')} · ${fmt(r.a.value)}${r.a.laisuat?' · '+r.a.laisuat+'%':''}</text>`;
+    if(r.uoc){
+      s+=`<rect x="${x0.toFixed(1)}" y="${by}" width="${Math.max(3,x1-x0).toFixed(1)}" height="${bh}" rx="4" fill="${r.color}" opacity="0.16"/>`;
+      s+=`<rect x="${x0.toFixed(1)}" y="${by}" width="${Math.max(3,x1-x0).toFixed(1)}" height="${bh}" rx="4" fill="none" stroke="${r.color}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    } else {
+      const xn=Math.min(x1,Math.max(x0,X(t)));
+      s+=`<rect x="${x0.toFixed(1)}" y="${by}" width="${Math.max(2,xn-x0).toFixed(1)}" height="${bh}" rx="4" fill="${r.color}" opacity="0.32"/>`;
+      s+=`<rect x="${xn.toFixed(1)}" y="${by}" width="${Math.max(2,x1-xn).toFixed(1)}" height="${bh}" rx="4" fill="${r.color}"/>`;
+    }
+    s+=`<text x="${(x1+6).toFixed(1)}" y="${(by+12).toFixed(1)}" fill="${qua?'var(--red)':r.color}" font-size="11.5" font-weight="600">${dmy(r.a.daohan)}</text>`;
+    s+=`<rect x="0" y="${y}" width="${W}" height="${RH}" fill="transparent" style="cursor:pointer" onclick="editAcct('${r.a.id}')"><title>${gEsc(r.a.name)} — ${gEsc(r.a.owner||'')}\n${fmt(r.a.value)}${r.a.kyhan?' · kỳ hạn '+r.a.kyhan+' tháng':' · chưa khai kỳ hạn'}${r.a.laisuat?' · '+r.a.laisuat+'%/năm':' · chưa khai lãi suất'}\nĐáo hạn ${dmy(r.a.daohan)} — ${nhan}</title></rect>`;
+  });
+  const nx=X(t);
+  s+=`<line x1="${nx.toFixed(1)}" x2="${nx.toFixed(1)}" y1="${MT-14}" y2="${MT+rows.length*RH+6}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+  s+=`<text x="${(nx+5).toFixed(1)}" y="${MT+rows.length*RH+20}" fill="var(--red)" font-size="11" font-weight="600">hôm nay</text>`;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.innerHTML=s;
+}
+
 /* ===== Xu hướng tài sản theo thời gian (nhiều đường, tích chọn) ===== */
 let trendChart;
 const TREND_COLORS=['#37c2a8','#4f9cf9','#f0665f','#e0b64a','#a887f4','#5ad1c0','#f2b84b','#e57bb0','#7ecf6a','#f28f6a','#6ac0f2','#c0f26a'];
@@ -1118,8 +1194,9 @@ function allOwners(){
   if(typeof OWNER_MAP!=='undefined') Object.values(OWNER_MAP).forEach(v=>s.add(v));
   if(typeof OWNER_GROUP!=='undefined') Object.keys(OWNER_GROUP).forEach(v=>s.add(v));
   if(DB&&DB.ownerGroups) Object.keys(DB.ownerGroups).forEach(v=>s.add(v));
+  (DB.owners||[]).forEach(o=>o.name&&s.add(o.name));          // mọi quỹ trong sổ Sở hữu, kể cả quỹ chưa có giao dịch nào
   (DB.accounts||[]).forEach(a=>a.owner&&s.add(a.owner));
-  (DB.transactions||[]).forEach(t=>t.owner&&s.add(t.owner));
+  (DB.transactions||[]).forEach(t=>{ if(t.owner)s.add(t.owner); if(t.ownerTo)s.add(t.ownerTo); });
   if(typeof OWNER_MERGE!=='undefined') Object.keys(OWNER_MERGE).forEach(k=>s.delete(k)); // bỏ chủ sở hữu đã gộp (vd "Chung")
   const out=[...s].sort((a,b)=>a.localeCompare(b,'vi'));
   const i=out.indexOf('Cá nhân'); if(i>0){ out.splice(i,1); out.unshift('Cá nhân'); }     // "Cá nhân" luôn đứng đầu = mặc định
@@ -1384,6 +1461,7 @@ function renderAssets(){
   const posAssets=DB.accounts.filter(a=>a.value>0).reduce((s,a)=>s+a.value,0);
   document.getElementById('aTotal').textContent=fmt(posAssets);
   document.getElementById('aDebt').textContent=fmt(debt);
+  renderGantt();
   const cm=byClass();
   const box=document.getElementById('acctList');
   let html='';
