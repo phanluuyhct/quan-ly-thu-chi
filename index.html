@@ -161,6 +161,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
 
 <!-- ============ DASHBOARD ============ -->
 <section class="view active" id="v-dash">
+  <div class="row" id="dashFilter" style="flex-wrap:wrap;gap:6px;margin:14px 0 2px"></div>
+  <div class="mini" id="dashFilterNote" style="margin-bottom:4px"></div>
   <div id="maturityBanner"></div>
   <div class="card" style="margin-top:16px">
     <div class="toolbar">
@@ -809,16 +811,55 @@ function sumAsset(list){ return list.filter(t=>t.type==='Chi'&&t.grp==='TS').red
 
 /* ================= DASHBOARD ================= */
 let allocChart,cashChart,fiChartObj;
+
+/* ---- Bộ lọc nhóm sở hữu cho màn Tổng quan ---- */
+let DASH_FILTER='Tất cả';
+try{ const s=localStorage.getItem('dashFilter'); if(s) DASH_FILTER=s; }catch(e){}
+/* Nhóm của một chủ sở hữu. Tên chủ sở hữu trùng tên nhóm (vd "Bệnh viện") thì chính là nhóm đó. */
+function dashGrp(owner){
+  const g=ownerGroupOf(owner);
+  if(g) return g;
+  return OWN_GROUPS.indexOf(owner)>=0 ? owner : 'Khác';
+}
+function dashAccounts(){
+  return DASH_FILTER==='Tất cả' ? DB.accounts : DB.accounts.filter(a=>dashGrp(a.owner)===DASH_FILTER);
+}
+function dashTx(list){
+  return DASH_FILTER==='Tất cả' ? list : list.filter(t=>dashGrp(t.owner)===DASH_FILTER);
+}
+function setDashFilter(g){
+  DASH_FILTER=g;
+  try{ localStorage.setItem('dashFilter',g); }catch(e){}
+  renderDash();
+}
+function renderDashFilter(){
+  const el=document.getElementById('dashFilter'); if(!el) return;
+  const opts=['Tất cả'].concat(OWN_GROUPS);
+  el.innerHTML=opts.map(g=>{
+    const on=g===DASH_FILTER;
+    const col=g==='Tất cả'?'var(--accent)':(OWN_COLOR[g]||'#8fa3b5');
+    return `<button class="btn sm${on?'':' ghost'}" onclick="setDashFilter('${g.replace(/'/g,"\\'")}')"
+      style="${on?'background:'+col+';border-color:'+col+';color:#0c1620':'border-color:'+col+';color:'+col}">${g}</button>`;
+  }).join('');
+  const note=document.getElementById('dashFilterNote');
+  if(note) note.innerHTML = DASH_FILTER==='Tất cả'
+    ? 'Đang xem <b>toàn bộ</b> — gồm cả tiền quản lý hộ.'
+    : `Đang lọc theo nhóm <b>${DASH_FILTER}</b>: tài sản, thu, chi, tỷ lệ tiết kiệm và dòng tiền bên dưới chỉ tính phần này. Bấm "Tất cả" để xem lại toàn bộ.`;
+}
+
 function renderDash(){
-  const total=assetTotal();
+  renderDashFilter();
+  const accs=dashAccounts();
+  const total=accs.reduce((s,a)=>s+a.value,0);
   document.getElementById('netTotal').textContent=fmt(total);
-  document.getElementById('netUsd').textContent='≈ '+VND.format(Math.round(total/USD_RATE))+' USD (tỷ giá '+VND.format(USD_RATE)+')';
-  document.getElementById('netMini').textContent=fmtShort(total);
+  document.getElementById('netUsd').textContent='≈ '+VND.format(Math.round(total/USD_RATE))+' USD (tỷ giá '+VND.format(USD_RATE)+')'
+    + (DASH_FILTER==='Tất cả'?'':' · riêng nhóm '+DASH_FILTER);
+  document.getElementById('netMini').textContent=fmtShort(assetTotal());
   // Kỳ tham chiếu: tháng gần nhất có dữ liệu (nếu tháng hiện tại trống)
   let cur=monthOf(todayISO());
-  if(!txInMonth(cur).length){ const ms=[...new Set(DB.transactions.map(t=>monthOf(t.date)))].sort(); if(ms.length)cur=ms[ms.length-1]; }
+  if(!dashTx(txInMonth(cur)).length){ const ms=[...new Set(dashTx(DB.transactions).map(t=>monthOf(t.date)))].sort(); if(ms.length)cur=ms[ms.length-1]; }
   window._curMonth=cur;
-  const list=txInMonth(cur);
+  const list=dashTx(txInMonth(cur));
   const thu=sumType(list,'Thu'), chi=sumLiving(list), asset=sumAsset(list);
   document.getElementById('mThu').textContent=fmt(thu);
   document.getElementById('mChi').textContent=fmt(chi);
@@ -828,7 +869,7 @@ function renderDash(){
   document.getElementById('mRateNote').textContent= 'kỳ '+cur+(asset>0?' · mua TS/ĐT '+fmtShort(asset):'');
 
   // alloc donut
-  const cm=byClass();
+  const cm={}; accs.forEach(a=>cm[a.cls]=(cm[a.cls]||0)+a.value);
   const labels=CLS_ORDER.filter(c=>cm[c]&&cm[c]>0);
   const data=labels.map(c=>cm[c]);
   const colors=labels.map(c=>CLS_COLOR[c]);
@@ -843,25 +884,33 @@ function renderDash(){
     `<span style="cursor:pointer" onclick="showClassDetail('${c}')"><span class="dot" style="background:${CLS_COLOR[c]}"></span>${c} · <b>${(cm[c]/posTotal*100).toFixed(1)}%</b></span>`).join('');
 
   // owner bars — theo sổ Sở hữu (SoHữu), là nguồn chuẩn "tiền của ai"
-  const om=ownersByGroup(); const ot=ownersTotal();
-  const ownerOrder=OWN_GROUPS.filter(g=>om[g]!==undefined).map(g=>[g,om[g]]);
+  const om=ownersByGroup(); const otAll=ownersTotal();
+  // Lọc theo nhóm: liệt kê từng quỹ/người trong nhóm thay vì gộp thành một cột
+  const filtered = DASH_FILTER!=='Tất cả';
+  const ot = filtered ? (om[DASH_FILTER]||0) : otAll;
+  const ownerOrder = filtered
+    ? (DB.owners||[]).filter(o=>o.group===DASH_FILTER && o.value!==0)
+        .sort((x,y)=>Math.abs(y.value)-Math.abs(x.value)).map(o=>[o.name,o.value])
+    : OWN_GROUPS.filter(g=>om[g]!==undefined).map(g=>[g,om[g]]);
   document.getElementById('ownerBars').innerHTML=ownerOrder.map(([o,v])=>`
     <div style="margin:10px 0;cursor:pointer" onclick="showOwnerDetail('${o.replace(/'/g,"\\'")}')">
       <div class="row" style="justify-content:space-between"><span>${o} ›</span><span class="mini">${fmt(v)} · ${(v/ot*100).toFixed(0)}%</span></div>
-      <div class="bar"><span style="width:${Math.max(2,Math.abs(v)/ot*100)}%;background:${OWN_COLOR[o]||'#8fa3b5'}"></span></div>
-    </div>`).join('')+`<div class="mini" style="margin-top:8px;text-align:right">Tổng sổ Sở hữu: <b>${fmt(ot)}</b></div>`;
+      <div class="bar"><span style="width:${Math.max(2,Math.abs(v)/(ot||1)*100)}%;background:${(filtered?OWN_COLOR[DASH_FILTER]:OWN_COLOR[o])||'#8fa3b5'}"></span></div>
+    </div>`).join('')+`<div class="mini" style="margin-top:8px;text-align:right">${filtered?'Tổng nhóm '+DASH_FILTER:'Tổng sổ Sở hữu'}: <b>${fmt(ot)}</b></div>`;
   const personal=om['Cá nhân']||0;
-  document.getElementById('managedPct').textContent=((1-personal/ot)*100).toFixed(0)+'%';
+  document.getElementById('managedPct').textContent=((1-personal/(otAll||1))*100).toFixed(0)+'%';
   document.getElementById('personalVal').textContent=fmt(personal);
   const gap=total-ot;
   const rn=document.getElementById('reconNote');
-  if(rn) rn.innerHTML= Math.abs(gap)>1000000? `Chênh với tổng tài sản thị trường (${fmtShort(total)}) là <b>${fmtShort(gap)}</b> — phần lãi chưa thực hiện/chưa phân bổ (kim loại, bảo hiểm...).`:'';
+  if(rn) rn.innerHTML= Math.abs(gap)>1000000
+    ? `Chênh giữa sổ Tài khoản (${fmtShort(total)}) và sổ Sở hữu (${fmtShort(ot)})${filtered?' của nhóm '+DASH_FILTER:''} là <b>${fmtShort(gap)}</b> — gồm lãi chưa thực hiện và phần số dư đầu kỳ chưa phân bổ.`
+    : '';
 
   // cashflow last 6 months
   const months=[]; const d=new Date();
   for(let i=5;i>=0;i--){ const dt=new Date(d.getFullYear(),d.getMonth()-i,1); months.push(dt.toISOString().slice(0,7)); }
-  const thuArr=months.map(m=>sumType(txInMonth(m),'Thu'));
-  const chiArr=months.map(m=>sumLiving(txInMonth(m)));
+  const thuArr=months.map(m=>sumType(dashTx(txInMonth(m)),'Thu'));
+  const chiArr=months.map(m=>sumLiving(dashTx(txInMonth(m))));
   if(cashChart)cashChart.destroy();
   cashChart=safeChart(document.getElementById('cashflowChart'),{
     type:'bar',
@@ -895,8 +944,10 @@ function renderMaturity(){
   }).filter(a=>a.days<=45).sort((x,y)=>x.days-y.days);
   if(!soon.length){ el.innerHTML=''; return; }
   el.innerHTML=`<div class="card" style="margin-top:16px;border-left:4px solid var(--amber)">
-    <h3 style="color:var(--amber)">🔔 Sổ tiết kiệm sắp/đã đáo hạn (${soon.length})</h3>
-    ${soon.map(a=>{const lbl=a.days<0?`quá hạn ${-a.days} ngày`:a.days===0?'đáo hạn hôm nay':`còn ${a.days} ngày`;
+    <h3 style="color:var(--amber)">🔔 Mốc cần xử lý (${soon.length})</h3>
+    <div class="mini" style="margin-bottom:6px">Sổ thường: ngày đáo hạn. Chứng chỉ tiền gửi (CCTG Bảo Lộc): mốc đủ 6 tháng nắm giữ — lợi suất lên bậc cao nhất, không phải ngày tất toán.</div>
+    ${soon.map(a=>{const cctg=/CCTG/i.test(a.name||'');
+      const lbl=a.days<0?(cctg?`đã qua mốc ${-a.days} ngày`:`quá hạn ${-a.days} ngày`):a.days===0?(cctg?'đủ 6 tháng hôm nay':'đáo hạn hôm nay'):`còn ${a.days} ngày`;
       const col=a.days<0?'var(--red)':a.days<=7?'var(--amber)':'var(--muted)';
       return `<div style="padding:8px 0;border-bottom:1px dashed var(--line)">
         <div class="row" style="justify-content:space-between"><span>${a.name} <span class="mini">· ${a.owner}${a.laisuat?' · '+a.laisuat+'%/năm':''}</span></span>
